@@ -25,7 +25,7 @@ import {
 const TENANT = {
   name: "Olive",                        // اسم الشركة
   slug: "Olive",                        // لأسماء ملفات Excel
-  whatsapp: "96896741992",              // ⚠️ غيّره لرقم واتساب Olive (بدون +)
+  whatsapp: "96896741992",              // رقم واتساب إعادة كلمة المرور
   emailHint: "name@olive.om",           // نموذج حقل البريد
   colors: { orange: "#F5701A", blue: "#5C8A1C", navy: "#233010" },
 };
