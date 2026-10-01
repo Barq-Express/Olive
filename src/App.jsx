@@ -832,7 +832,7 @@ function Login({ onRider, onHrEmp, onToggleLang }) {
     setErr(""); setBusy(true);
     supabase.rpc("rider_login", { p_phone: phone.trim(), p_password: rpw }).then(({ data, error }) => {
       setBusy(false);
-      if (error || !data) return setErr(t("رقم الهاتف أو كلمة المرور غير صحيحة", "Invalid phone or password"));
+      if (error || !data) return setErr(t("رقم الـ ID أو كلمة المرور غير صحيحة", "Invalid ID or password"));
       onRider(data, { phone: phone.trim(), password: rpw });
     });
   };
@@ -867,7 +867,7 @@ function Login({ onRider, onHrEmp, onToggleLang }) {
             </div>
           ) : tab === "rider" ? (
             <div className="space-y-4">
-              <Field label={t("رقم الهاتف", "Phone")}><input className={inputCls} dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="94003001" /></Field>
+              <Field label={t("اسم المستخدم (Olive-الايدي)", "Username (Olive-ID)")}><input className={inputCls} dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Olive-1024" /></Field>
               <Field label={t("كلمة المرور", "Password")}><input type="password" className={inputCls} value={rpw} onChange={(e) => setRpw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && riderLogin()} placeholder="••••••" /></Field>
               {err && <p className="text-xs text-red-600">{err}</p>}
               <Btn onClick={riderLogin} className="w-full justify-center">{busy ? "..." : t("دخول المندوب", "Rider Sign In")}</Btn>
@@ -2725,6 +2725,8 @@ function RiderPortal({ db, riderId, creds, refresh }) {
       .then(({ data, error }) => { setBankBusy(false); if (error || !data) return setBankMsg(t("تعذّر الحفظ، حاول مرة أخرى", "Save failed, try again")); if (data.locked) return setBankMsg(t("بياناتك مقفلة. تواصل مع الإدارة لفتح التعديل.", "Your details are locked. Contact admin to unlock.")); setBankMsg(t("✅ تم حفظ بياناتك البنكية وقفلها", "✅ Bank details saved and locked")); refresh(); });
   };
   const myTransfers = db.transfers.filter((t) => t.riderId === riderId).sort((a, b) => b.date.localeCompare(a.date));
+  const [histQ, setHistQ] = useState("");
+  const shownTransfers = myTransfers.filter((t) => { const q = histQ.trim().toLowerCase(); if (!q) return true; return String(t.reference || "").toLowerCase().includes(q) || String(t.date || "").includes(q) || String(t.amount || "").includes(q); });
   // حالة دفع شيت معيّن (حسب مطابقة التاريخ): none | pending | approved | rejected
   const sheetPayInfo = (sheetDate) => {
     const txs = db.transfers.filter((x) => x.riderId === riderId && String(x.date || "").slice(0, 10) === String(sheetDate || "").slice(0, 10));
@@ -2983,23 +2985,28 @@ function RiderPortal({ db, riderId, creds, refresh }) {
       </Card>
 
       <Card className="p-5">
-        <h3 className="font-bold text-slate-800 mb-3">{tr("سجل التحويلات")}</h3>
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-bold text-slate-800">{tr("سجل التحويلات")}</h3>
+          <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-64 pr-9 pl-3" placeholder={t("بحث برقم المرجع / التاريخ / المبلغ", "search reference / date / amount")} value={histQ} onChange={(e) => setHistQ(e.target.value)} /></div>
+        </div>
         <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("التاريخ"), tr("المبلغ"), tr("المرجع"), tr("الحالة"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("التاريخ"), tr("المبلغ"), tr("المرجع"), t("الإيصال", "Receipt"), tr("الحالة"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
-            {myTransfers.map((t) => {
+            {shownTransfers.map((t) => {
               // زر التعديل يظهر فقط للمرفوض الذي لم يُعَد إرساله بعد
               // (لا يوجد تحويل غير مرفوض أحدث منه)
               const hasNewer = myTransfers.some((o) => o.id !== t.id && o.status !== "Rejected" && String(o.submittedAt || o.date || "") >= String(t.submittedAt || t.date || ""));
               const showEdit = t.status === "Rejected" && !hasNewer;
+              const isPdf = /\.pdf($|\?)/i.test(String(t.receipt || ""));
               return (
               <tr key={t.id} className="border-b border-slate-50">
                 <td className="py-2 px-3">{t.date}{t.submittedAt ? <div className="text-[10px] text-slate-400" dir="ltr">{LANG === "en" ? "Sent: " : "رُفع: "}{t.submittedAt}</div> : null}</td><td className="px-3">{omr(t.amount)}</td><td className="px-3" dir="ltr">{t.reference}</td>
+                <td className="px-3">{t.receipt ? (isPdf ? <a href={t.receipt} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold underline" style={{ color: BRAND.blue }}>PDF</a> : <a href={t.receipt} target="_blank" rel="noopener noreferrer" title={t("عرض الإيصال", "View receipt")}><img src={t.receipt} alt="receipt" className="h-10 w-10 object-cover rounded border border-slate-200 hover:opacity-80" /></a>) : <span className="text-slate-300">—</span>}</td>
                 <td className="px-3">{t.reconLabel ? <Pill color={t.status === "Approved" ? "#0f9d58" : t.status === "Rejected" ? "#c0341d" : "#d97706"}>{tr(t.reconLabel)}</Pill> : <Pill color="#d97706">{tr("قيد المراجعة")}</Pill>}{t.status === "Rejected" && t.rejectReason ? <div className="text-[11px] text-red-600 mt-1">{tr("سبب الرفض")}: {t.rejectReason}</div> : null}</td>
                 <td className="px-3">{showEdit && <button onClick={() => { setForm({ amount: String(t.amount), reference: "", date: todayStr(), receipt: "" }); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg" style={{ background: BRAND.orange + "18", color: BRAND.orange }}><Pencil size={13} /> {LANG === "en" ? "Edit & resend" : "تعديل وإعادة الإرسال"}</button>}</td>
               </tr>
             ); })}
-            {myTransfers.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-400">{tr("لا توجد تحويلات")}</td></tr>}
+            {shownTransfers.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">{myTransfers.length === 0 ? tr("لا توجد تحويلات") : t("لا نتائج مطابقة", "No matching results")}</td></tr>}
           </tbody>
         </table></div>
       </Card>
