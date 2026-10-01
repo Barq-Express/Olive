@@ -1689,7 +1689,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     else if (lastDecided && lastDecided.status === "Rejected") { key = "rejected"; label = tr("رفض يدوي"); color = "#c0341d"; }
     else { key = "pending"; label = t("لم يحوّل (Pending)", "Not transferred (Pending)"); color = "#d97706"; }
     return { r, m, key, label, color, hasPending };
-  }).filter((x) => x.m.codToTransfer > 0.001);
+  }).filter((x) => dateActive ? (x.m.codToTransfer > 0.001 || x.m.deducted > 0.001) : x.m.codToTransfer > 0.001);
   const shownDue = dueRows.filter((x) => (typeDue === "all" || x.r.type === typeDue) && (natDue === "all" || natClass(x.r.nationality) === natDue) && (statusF === "all" || x.key === statusF) && (agentF === "all" || (agentF === "none" ? !x.r.codAgent : nEmail(x.r.codAgent) === nEmail(agentF))) && (x.r.name.includes(q) || (x.r.phone || "").includes(q) || (x.r.companyId || "").includes(q)));
   return (
     <div className="space-y-4">
