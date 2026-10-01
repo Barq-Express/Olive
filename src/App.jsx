@@ -43,11 +43,11 @@ const FULL_MONTH_HOURS = 176; // عند بلوغها يُعتبر الراتب �
 const FULL_MONTH_SALARY = 425; // الراتب الشهري الكامل (ريال)
 const pctAccept = (v) => { const n = Number(v) || 0; return n > 0 && n <= 1 ? Math.round(n * 100) : Math.round(n); }; // 1.0 (كسر إكسل) => 100%
 const PAYOUT_INFO = {
-  bankName: "بنك مسقط - Bank Muscat",
-  holder: "Sameer Muhammad Saleem",
-  account: "0435048834800017",
-  activePhone: "97108146",
-  receiptPhone: "75283938",
+  bankName: "SOHAR ISLAMIC WINDOW",
+  holder: "Modern Path Techniques",
+  account: "70801010686701",
+  activePhone: "",
+  receiptPhone: "98551286",
 };
 const EXCUSE_TYPES = [["sick", "إجازة مرضية", "Sick Leave"], ["normal", "إجازة اعتيادية", "Leave"], ["emergency", "ظرف طارئ", "Emergency"], ["other", "أخرى", "Other"]];
 const excuseLabel = (k) => { const e = EXCUSE_TYPES.find((x) => x[0] === k); return e ? t(e[1], e[2]) : k; };
@@ -2701,6 +2701,7 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
 }
 
 const PAY_PER_SHEET_START = "2026-10-01"; // نظام الدفع لكل شيت يبدأ من هذا التاريخ
+const PAY_NOW_ONLY = true;  // true = المندوب لازم يضغط «ادفع الآن» | false = يرفع الإيصال بحرية
 const NEW_SYSTEM_START = "2026-10"; // النظام الجديد (الرصيد الرئيسي) يبدأ من أكتوبر — ما قبله يُسدّد عبر المالية
 function RiderPortal({ db, riderId, creds, refresh }) {
   const rider = db.riders.find((r) => r.id === riderId);
@@ -2731,6 +2732,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const monthLabel = (m) => { const p = String(m).split("-"); const mo = Number(p[1]); return LANG === "en" ? m : ((AR_MONTHS[mo - 1] || m) + " " + (p[0] || "")); };
   const txByMonth = {}; shownTransfers.forEach((x) => { const mm = String(x.date || "").slice(0, 7) || "—"; (txByMonth[mm] = txByMonth[mm] || []).push(x); });
   const txMonths = Object.keys(txByMonth).sort().reverse();
+  const payNowOnly = (db.payNowOnly !== undefined && db.payNowOnly !== null) ? db.payNowOnly : PAY_NOW_ONLY;
   // حالة دفع شيت معيّن (حسب مطابقة التاريخ): none | pending | approved | rejected
   const sheetPayInfo = (sheetDate) => {
     const txs = db.transfers.filter((x) => x.riderId === riderId && String(x.date || "").slice(0, 10) === String(sheetDate || "").slice(0, 10));
@@ -2740,7 +2742,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
     return { st: "rejected" };
   };
   const submit = () => {
-    if (!payFor) { alert(t("لرفع إيصال، اضغط «ادفع الآن» بجانب اليوم المطلوب في سجل العمل.", "To upload a receipt, press Pay Now next to the day in Work History.")); return; }
+    if (payNowOnly && !payFor) { alert(t("لرفع إيصال، اضغط «ادفع الآن» بجانب اليوم المطلوب في سجل العمل.", "To upload a receipt, press Pay Now next to the day in Work History.")); return; }
     if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك رفع الإيصال فقط من الساعة " + w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can upload receipts only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; }
     if (!form.amount || !form.reference) return alert(tr("المبلغ والرقم المرجعي مطلوبان"));
     supabase.rpc("rider_submit_transfer", { p_phone: creds.phone, p_password: creds.password, p_amount: Number(form.amount), p_reference: String(form.reference).trim(), p_date: form.date, p_receipt: form.receipt || "" })
@@ -2848,7 +2850,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
             <button onClick={() => { setPayFor(null); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); }} className="text-xs font-semibold text-slate-500 whitespace-nowrap">{t("إلغاء", "Cancel")}</button>
           </div>
         )}
-        {!payFor ? (
+        {(payNowOnly && !payFor) ? (
           <div className="p-4 rounded-lg text-sm text-center font-semibold" style={{ background: "#fff7ed", color: "#9a3412" }}>
             {t("لرفع إيصال، اضغط زر «ادفع الآن» بجانب اليوم المطلوب في «سجل العمل» بالأسفل. لا يمكن رفع إيصال بدون اختيار اليوم.", "To upload a receipt, press the Pay Now button next to the day in Work History below. Receipts cannot be uploaded without selecting a day.")}
           </div>
@@ -2989,7 +2991,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           <div className="flex justify-between border-b border-slate-50 py-1"><span className="text-slate-500">{t("اسم البنك", "Bank")}</span><span className="font-semibold">{PAYOUT_INFO.bankName}</span></div>
           <div className="flex justify-between border-b border-slate-50 py-1"><span className="text-slate-500">{t("اسم الحساب", "Account name")}</span><span className="font-semibold" dir="ltr">{PAYOUT_INFO.holder}</span></div>
           <div className="flex justify-between border-b border-slate-50 py-1"><span className="text-slate-500">{t("رقم الحساب", "Account no.")}</span><span className="font-semibold" dir="ltr">{PAYOUT_INFO.account}</span></div>
-          <div className="flex justify-between border-b border-slate-50 py-1"><span className="text-slate-500">{t("الرقم المفعّل للتحويل", "Active transfer no.")}</span><span className="font-semibold" dir="ltr">{PAYOUT_INFO.activePhone}</span></div>
+          {PAYOUT_INFO.activePhone ? <div className="flex justify-between border-b border-slate-50 py-1"><span className="text-slate-500">{t("الرقم المفعّل للتحويل", "Active transfer no.")}</span><span className="font-semibold" dir="ltr">{PAYOUT_INFO.activePhone}</span></div> : null}
           <div className="flex justify-between py-1"><span className="text-slate-500">{t("إرسال الإيصال على", "Send receipt to")}</span><span className="font-semibold" dir="ltr">{PAYOUT_INFO.receiptPhone}</span></div>
         </div>
         <div className="mt-3 p-2 rounded-lg text-xs font-semibold text-center" style={{ background: "#fff7ed", color: "#9a3412" }}>{t("التحويل يومياً بعد انتهاء العمل، وإرسال الإيصال على الرقم أعلاه.", "Transfer daily after work, and send the receipt to the number above.")}</div>
@@ -4475,16 +4477,16 @@ export default function App() {
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
         const st = (data && data.data) || {};
         const cw = st.codWindow || { enabled: false };
-        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [] } : cur));
+        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly } : cur));
       }).catch(() => { setRider((cur) => (cur ? { ...cur, codWindow: { enabled: false } } : cur)); });
     }
     const id = setInterval(() => {
       supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => {
-        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments } : cur));
+        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly } : cur));
       });
       // حدّث إعداد النافذة والخصومات دورياً أيضاً
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
-        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [] } : cur));
+        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly } : cur));
       });
     }, 30000);
     return () => clearInterval(id);
@@ -4544,11 +4546,11 @@ export default function App() {
   }
 
   if (rider) {
-    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments }); });
+    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments, payNowOnly: rider.payNowOnly }); });
     const logoutRider = () => { try { localStorage.removeItem("mrd_rider"); } catch (e) {} setRider(null); };
     const rd = rider.view.riders[0];
     if (!rd) { logoutRider(); return null; }
-    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [] };
+    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [], payNowOnly: (rider.payNowOnly !== undefined ? rider.payNowOnly : rider.view.payNowOnly) };
     return (
       <div dir={dirOf()} className="min-h-screen bg-slate-100" data-lang={lang}>
         <Topbar user={{ name: rd.name, role: "Rider" }} onLogout={logoutRider} onMenu={null} title={t("بوابة المندوب", "Rider Portal")} logo onToggleLang={toggleLang} />
@@ -4654,6 +4656,11 @@ export default function App() {
               </div>
               <p className="text-[11px] text-slate-400 mt-2">{t("الحالي:", "Current:")} {codWindowOpen(db.codWindow) ? <span style={{ color: "#0f9d58" }}>{t("مفتوحة الآن ✓", "Open now ✓")}</span> : <span style={{ color: "#c0341d" }}>{t("مغلقة الآن", "Closed now")}</span>}</p>
               <p className="text-[11px] text-amber-600 mt-1">{t("⚠️ لتفعيل المنع على الخادم أيضاً، شغّل ملف SQL المرفق مرة واحدة.", "⚠️ To enforce on the server too, run the attached SQL once.")}</p>
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Upload size={16} /> {t("طريقة رفع المندوب للإيصالات", "Rider Receipt Upload Mode")}</h4>
+                <label className="flex items-center gap-2 text-sm cursor-pointer mt-2"><input type="checkbox" checked={db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY} onChange={(e) => save({ ...db, payNowOnly: e.target.checked })} /> {t("إلزام الدفع عبر زر «ادفع الآن» فقط (منع الرفع الحر)", "Require payment via Pay Now only (block free upload)")}</label>
+                <p className="text-[11px] text-slate-400 mt-2">{(db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY) ? <span style={{ color: "#c0341d" }}>{t("مقفل: المندوب يرفع فقط عبر «ادفع الآن»", "Locked: riders upload only via Pay Now")}</span> : <span style={{ color: "#0f9d58" }}>{t("مفتوح: المندوب يرفع الإيصال بحرية", "Open: riders upload freely")}</span>}</p>
+              </div>
             </div>
           )}
         </div>
