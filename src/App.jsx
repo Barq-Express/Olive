@@ -2740,6 +2740,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
     return { st: "rejected" };
   };
   const submit = () => {
+    if (!payFor) { alert(t("لرفع إيصال، اضغط «ادفع الآن» بجانب اليوم المطلوب في سجل العمل.", "To upload a receipt, press Pay Now next to the day in Work History.")); return; }
     if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك رفع الإيصال فقط من الساعة " + w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can upload receipts only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; }
     if (!form.amount || !form.reference) return alert(tr("المبلغ والرقم المرجعي مطلوبان"));
     supabase.rpc("rider_submit_transfer", { p_phone: creds.phone, p_password: creds.password, p_amount: Number(form.amount), p_reference: String(form.reference).trim(), p_date: form.date, p_receipt: form.receipt || "" })
@@ -2847,7 +2848,12 @@ function RiderPortal({ db, riderId, creds, refresh }) {
             <button onClick={() => { setPayFor(null); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); }} className="text-xs font-semibold text-slate-500 whitespace-nowrap">{t("إلغاء", "Cancel")}</button>
           </div>
         )}
-        {(() => { const open = codWindowOpen(db.codWindow); const w = db.codWindow || {}; return w.enabled ? (
+        {!payFor ? (
+          <div className="p-4 rounded-lg text-sm text-center font-semibold" style={{ background: "#fff7ed", color: "#9a3412" }}>
+            {t("لرفع إيصال، اضغط زر «ادفع الآن» بجانب اليوم المطلوب في «سجل العمل» بالأسفل. لا يمكن رفع إيصال بدون اختيار اليوم.", "To upload a receipt, press the Pay Now button next to the day in Work History below. Receipts cannot be uploaded without selecting a day.")}
+          </div>
+        ) : (<>
+{(() => { const open = codWindowOpen(db.codWindow); const w = db.codWindow || {}; return w.enabled ? (
           <div className="mb-4 p-3 rounded-lg text-sm flex items-center gap-2" style={{ background: open ? "#f0fdf4" : "#fff1ee", color: open ? "#0f9d58" : "#c0341d" }}>
             <Clock size={16} />
             {open ? <span>{t("نافذة التحويل مفتوحة الآن — أرسل إيصالك قبل " + w.end + " (بتوقيت عمان).", "Transfer window is open — submit before " + w.end + " (Oman time).")}</span>
@@ -2871,6 +2877,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           </div>
         )}
         <div className="mt-4"><Btn onClick={submit} disabled={upLoading}>{upLoading ? t("جارٍ الرفع...", "Uploading...") : tr("إرسال التحويل")}</Btn></div>
+        </>)}
       </Card>
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2"><Banknote size={18} /> {t("بياناتي البنكية", "My Bank Details")}{rider.bankLocked && <Pill color="#0f9d58">🔒 {t("مؤكّدة", "Confirmed")}</Pill>}</h3>
@@ -2991,7 +2998,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h3 className="font-bold text-slate-800">{tr("سجل التحويلات")}</h3>
-          <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-64 pr-9 pl-3" placeholder={t("بحث برقم المرجع / التاريخ / المبلغ", "search reference / date / amount")} value={histQ} onChange={(e) => setHistQ(e.target.value)} /></div>
+          <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-64 pr-9 pl-3" placeholder={t("بحث برقم المرجع / التاريخ / المبلغ", "search reference / date / amount")} value={histQ} name="mrd-hist-search" autoComplete="off" autoCorrect="off" spellCheck={false} onChange={(e) => setHistQ(e.target.value)} /></div>
         </div>
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("التاريخ"), tr("المبلغ"), tr("المرجع"), t("الإيصال", "Receipt"), tr("الحالة"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
