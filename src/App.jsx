@@ -499,8 +499,11 @@ function resizeImage(file, max = 900) {
         let w = img.width, h = img.height;
         if (w > max) { h = Math.round((h * max) / w); w = max; }
         c.width = w; c.height = h;
-        c.getContext("2d").drawImage(img, 0, 0, w, h);
-        res(c.toDataURL("image/jpeg", 0.7));
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        res(c.toDataURL("image/jpeg", 0.85));
       };
       img.src = rd.result;
     };
