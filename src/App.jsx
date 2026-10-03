@@ -876,7 +876,7 @@ function Login({ onRider, onHrEmp, onToggleLang }) {
             </div>
           ) : tab === "rider" ? (
             <div className="space-y-4">
-              <Field label={t("اسم المستخدم (Olive-الايدي)", "Username (Olive-ID)")}><input className={inputCls} dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Olive-1024" /></Field>
+              <Field label={t("اسم المستخدم (الايدي)", "Username (ID)")}><input className={inputCls} dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="655" /></Field>
               <Field label={t("كلمة المرور", "Password")}><input type="password" className={inputCls} value={rpw} onChange={(e) => setRpw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && riderLogin()} placeholder="••••••" /></Field>
               {err && <p className="text-xs text-red-600">{err}</p>}
               <Btn onClick={riderLogin} className="w-full justify-center">{busy ? "..." : t("دخول المندوب", "Rider Sign In")}</Btn>
