@@ -1180,7 +1180,7 @@ function Riders({ db, save, company, user }) {
         </div>
       </div>
       <Card className="overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
             {[tr("المندوب"), "ID", tr("الهاتف"), tr("المدني"), tr("المنطقة"), tr("الشركة"), tr("النوع"), tr("الحالة"), tr("آخر عمل"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
@@ -1382,7 +1382,7 @@ function OrdersTab({ company, db, save, user }) {
           <Btn kind="ghost" size="sm" onClick={() => exportExcel(histRows.map((x) => ({ التاريخ: x.date, الطلبات: x.orders, ساعات_العمل: Math.round(x.hours * 100) / 100, COD: x.cod, المطلوب_تحويله: x.due })), "History_" + company + (hRider !== "all" ? "_" + (companyRiders.find((r) => r.id === hRider)?.name || "") : ""))}><Download size={14} /> Excel</Btn>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("التاريخ", "Date"), t("الطلبات", "Orders"), t("ساعات العمل", "Work Hours"), "COD", t("المطلوب تحويله", "To Transfer")].map((h) => <th key={h} className="py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {histRows.length === 0 ? <tr><td colSpan={5} className="text-center text-slate-400 py-6">{t("لا توجد بيانات في هذه المدة", "No data in this range")}</td></tr>
@@ -1399,7 +1399,7 @@ function OrdersTab({ company, db, save, user }) {
             <Btn kind="ghost" size="sm" onClick={() => exportExcel(latest.results.map((r) => ({ المندوب: r.name, الطلبات: r.orders, COD: r.cod, مطلوب_تحويله: r.transferDue, الحالة: r.matched ? tr("مطابق") : tr("غير مسجل") })), `${company}_${latest.date}`)}><Download size={14} /> Excel</Btn>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm whitespace-nowrap">
               <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
                 {[tr("المندوب"), tr("الطلبات"), "COD", tr("مطلوب تحويله"), tr("الحالة")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
               </tr></thead>
@@ -1738,7 +1738,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
             <div className="rounded-xl p-3 text-center" style={{ background: "#fff1ee" }}><div className="text-xs text-slate-500">{t("إجمالي المستحق", "Total Outstanding")}</div><div className="text-lg font-bold" style={{ color: "#c0341d" }}>{omr(tot.owed)}</div></div>
           </div>
         ); })()}
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), "ID", t("الموظف المسؤول", "Agent"), t("COD الكلي", "Total COD"), t("المحوّل", "Transferred"), t("قيد المراجعة", "Under review"), t("خصم الراتب", "Salary Ded."), t("المتبقي", "Remaining"), t("الحالة", "Status"), t("إجراء", "Action")].map((h) => <th key={h} className="py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {shownDue.map((x) => (
@@ -1786,7 +1786,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
           </div>
         ); })()}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
               {[tr("المندوب"), tr("الهاتف"), "ID", tr("المبلغ"), tr("المرجع"), tr("التاريخ"), tr("الإيصال"), tr("التصنيف"), tr("إجراء")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
             </tr></thead>
@@ -1890,7 +1890,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                 <Btn kind="ghost" size="sm" onClick={() => exportExcel(flt.map((r) => ({ التاريخ: r.at, المندوب: riderName(r.riderId), النوع: r.kind === "ded" ? "خصم راتب" : "تعديل COD", المبلغ: r.amt, السبب: r.reason, بواسطة: r.by, الحالة: r.status === "approved" ? "معتمد" : r.status === "pending" ? "قيد الاعتماد" : "مرفوض", اعتمده: r.decidedBy || "" })), "DeductionsLog_" + company)}><Download size={14} /> Excel</Btn>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm whitespace-nowrap">
                   <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("التاريخ/الوقت", "Date/Time"), tr("المندوب"), t("النوع", "Type"), t("المبلغ", "Amount"), t("السبب", "Reason"), t("بواسطة", "By"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
                   <tbody>
                     {flt.map((r) => (
@@ -2143,7 +2143,7 @@ function ReconTab({ company, db, save }) {
         <Card className="p-5">
           <h3 className="font-bold text-slate-800 mb-3">{tr("نتيجة التصنيف")}</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm whitespace-nowrap">
               <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
                 {[tr("المندوب"), tr("المبلغ"), tr("المرجع"), tr("التاريخ"), tr("التصنيف")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
               </tr></thead>
@@ -2234,7 +2234,7 @@ function AttendanceTab({ company, db, save }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
             {[tr("المندوب"), "ID", tr("الهاتف"), tr("المنطقة"), tr("النوع"), t("الحالة", "Status"), t("الأداء (فول تايم)", "Performance (FT)"), t("العذر", "Excuse")].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
@@ -2339,7 +2339,7 @@ function ReportsScoped({ db, company }) {
       ); })()}
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{types[type]}</h3>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{cols.map((c) => <th key={c} className="py-2 px-3 font-semibold">{tr(c).replace(/_/g, " ")}</th>)}</tr></thead>
           <tbody>{rows.map((r, i) => <tr key={i} className="border-b border-slate-50">{cols.map((c) => <td key={c} className="py-2 px-3">{typeof r[c] === "number" && /COD|مستحق|راتب|محوّل|متبقي|حقوق/.test(c) ? omr(r[c]) : r[c]}</td>)}</tr>)}
             {rows.length === 0 && <tr><td colSpan={cols.length || 1} className="py-6 text-center text-slate-400">{tr("لا بيانات")}</td></tr>}</tbody>
@@ -2493,7 +2493,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("الطلبات", "Orders"), t("الساعات", "Hours"), ...(lbScope === "overall" ? [t("أيام العمل", "Days")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {lbSorted.map((x, i) => (
@@ -2521,7 +2521,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), tr("المنطقة"), t("النوع", "Type"), t("الساعات", "Hours"), t("الطلبات", "Orders"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {hrSorted.map((x, i) => { const full = hrScope === "day" ? x.hours >= FULL_DAY : true; const rr = rIdx[x.rid]; return (
@@ -2542,7 +2542,7 @@ function OperationsTab({ company, db }) {
 
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المنطقة", "Area"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("الساعات", "Hours"), t("طلب/ساعة", "Orders/hr")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {areaRows.map((g) => (
@@ -2562,7 +2562,7 @@ function OperationsTab({ company, db }) {
       <Card className="p-5" style={{ borderRight: "4px solid #c0341d" }}>
         <h3 className="font-bold text-slate-800 mb-1">🚨 {t("غياب 7 أيام فأكثر (متتالية)", "Absent 7+ days (consecutive)")} <span className="text-slate-400 text-sm">({absent.length})</span></h3>
         <p className="text-xs text-slate-500 mb-3">{t("مناديب نشطون لم يعملوا منذ 7 أيام أو أكثر — يحتاجون متابعة.", "Active riders with no work for 7+ days — need follow-up.")}</p>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), "ID", tr("المنطقة"), t("آخر يوم عمل", "Last worked"), t("أيام الغياب", "Days absent")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {absent.map((x) => (
@@ -2635,7 +2635,7 @@ function MonthlyTab({ company, db }) {
           <div className="flex justify-end">
             <Btn kind="ghost" size="sm" onClick={() => exportExcel(rdrs.map((r) => { const s = summarize(r.id); return { المندوب: r.name, النوع: r.type, أيام_العمل: s.days, الطلبات: s.orders, COD: s.cod, الساعات_المحسوبة: s.hoursCapped, الساعات_الفعلية: s.hoursRaw, متوسط_القبول: s.avgAccept, المستحق: s.earn }; }).filter((x) => x.أيام_العمل > 0), "Monthly_" + company + "_" + month)}><Download size={14} /> Excel</Btn>
           </div>
-          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), tr("النوع"), t("أيام", "Days"), t("الطلبات", "Orders"), "COD", t("الساعات", "Hours"), t("متوسط القبول", "Avg accept"), t("المستحق", "Earnings")].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {rdrs.map((r) => { const s = summarize(r.id); if (s.days === 0) return null; const isFT = r.type === "Full Time"; return (
@@ -2671,7 +2671,7 @@ function MonthlyTab({ company, db }) {
                 {isFT && <div className="p-2 rounded-lg bg-slate-50"><div className="text-[11px] text-slate-500">{t("الساعات", "Hours")}</div><div className="font-bold">{s.hoursCapped}{s.hoursRaw !== s.hoursCapped ? <span className="text-[10px] text-slate-400"> ({s.hoursRaw})</span> : ""}</div></div>}
                 <div className="p-2 rounded-lg bg-slate-50"><div className="text-[11px] text-slate-500">{t("المستحق", "Earnings")}</div><div className="font-bold" style={{ color: "#0f9d58" }}>{omr(s.earn)}</div></div>
               </div>
-              <div className="overflow-x-auto"><table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
                 <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("التاريخ", "Date"), t("الطلبات", "Orders"), "COD", ...(isFT ? [t("الساعات", "Hours"), t("القبول %", "Accept %")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>
                   {rows.map((x, i) => { const capped = Math.min(x.hours, HOURS_CAP); const over = x.hours > HOURS_CAP; const hRed = isFT && x.hours > 0 && x.hours < HOURS_MIN; const aRed = isFT && x.accept > 0 && x.accept < ACCEPT_MIN; return (
@@ -2761,7 +2761,7 @@ function DuesTab({ company, db, save, user }) {
           <Btn kind="ghost" onClick={() => exportExcel(list.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, النوع: r.type, إجمالي_الراتب: m.earn, خصم_COD: m.codDed, صافي_الراتب: m.netSalary, المدفوع: m.paidDues, المتبقي: m.duesRemaining, البنك: r.bankName || "", الحساب: r.bank || "" }; }), "Dues_" + company)}><Download size={15} /> Excel</Btn>
         </div>
       </div>
-      <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+      <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
         <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), tr("النوع"), t("إجمالي الراتب", "Gross"), t("خصم COD", "COD Ded."), t("صافي الراتب", "Net"), t("المدفوع", "Paid"), t("المتبقي", "Remaining"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
         <tbody>
           {list.slice((dpage - 1) * DPER, dpage * DPER).map((r) => { const m = riderMoney(db, r.id); const rem = m.duesRemaining; return (
@@ -2903,7 +2903,7 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
 
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("أرصدة إجازاتي", "My Leave Balances")}</h3>
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("المستحق", "Entitled"), t("المستخدم", "Used"), t("معلّقة", "Pending"), t("المتبقي", "Remaining")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("المستحق", "Entitled"), t("المستخدم", "Used"), t("معلّقة", "Pending"), t("المتبقي", "Remaining")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>{types.map((ty) => { const b = bal(ty.id); return <tr key={ty.id} className="border-b border-slate-50"><td className="py-2 px-3">{ty.nameAr}</td><td className="px-3">{b.ent || "—"}</td><td className="px-3">{b.used}</td><td className="px-3">{b.pend}</td><td className="px-3 font-bold">{b.remaining ?? "—"}</td></tr>; })}</tbody></table></div>
       </Card>
 
@@ -2924,7 +2924,7 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("طلباتي", "My Requests")}</h3>
         {reqs.length === 0 ? <p className="text-sm text-slate-400">{t("لا توجد طلبات", "No requests")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("من", "From"), t("إلى", "To"), t("الأيام", "Days"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("من", "From"), t("إلى", "To"), t("الأيام", "Days"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{reqs.slice().reverse().map((r) => { const ty = (data.leaveTypes || []).find((x) => x.id === r.typeId); return <tr key={r.id} className="border-b border-slate-50"><td className="py-2 px-3">{ty ? ty.nameAr : r.typeId}{r.status === "rejected" && r.rejectReason && <div className="text-[10px] text-red-600">{r.rejectReason}</div>}</td><td className="px-3" dir="ltr">{r.from}</td><td className="px-3" dir="ltr">{r.to}</td><td className="px-3">{r.days}</td><td className="px-3"><Pill color={stColor[r.status]}>{stName[r.status] || r.status}</Pill></td></tr>; })}</tbody></table></div>
         )}
       </Card>
@@ -2932,7 +2932,7 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("رواتبي", "My Payslips")}</h3>
         {pays.length === 0 ? <p className="text-sm text-slate-400">{t("لا يوجد كشوفات", "No payslips")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("الأساسي", "Basic"), t("البدلات", "Allow."), t("الاستقطاعات", "Deduct."), t("الصافي", "Net"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("الأساسي", "Basic"), t("البدلات", "Allow."), t("الاستقطاعات", "Deduct."), t("الصافي", "Net"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{pays.filter((p) => p.item).map((p) => <tr key={p.month} className="border-b border-slate-50"><td className="py-2 px-3" dir="ltr">{p.month}</td><td className="px-3">{omr(p.item.basic)}</td><td className="px-3">{omr(p.item.allowances)}</td><td className="px-3">{omr(p.item.deductions)}</td><td className="px-3 font-bold">{omr(p.item.basic + p.item.allowances - p.item.deductions)}</td><td className="px-3">{p.item.status === "paid" ? <Pill color="#0f9d58">{t("مدفوع", "Paid")}</Pill> : <Pill color="#d97706">{t("قيد المعالجة", "Processing")}</Pill>}</td></tr>)}</tbody></table></div>
         )}
       </Card>
@@ -3067,7 +3067,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
             <div className="rounded-xl p-3" style={{ background: "#eef2ff" }}><div className="text-xs text-slate-500">{t("إجمالي المتبقي", "Total remaining")}</div><div className="text-xl font-bold" style={{ color: BRAND.blue }}>{omr(totalRem)}</div></div>
           </div>
           {owedOld > 0.001 && <p className="text-xs mb-3 p-2 rounded-lg" style={{ background: "#fefce8", color: "#854d0e" }}>{t("لديك مبالغ سابقة قبل أكتوبر لا يمكنك سدادها هنا — تواصل مع المالية لتسويتها.", "You have pre-October amounts that can't be paid here — contact Finance to settle them.")}</p>}
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("رصيد افتتاحي", "Opening"), "COD", t("خصم", "Deduction"), t("مدفوع", "Paid"), t("ساعات", "Hours"), t("المتبقي", "Remaining")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{mon.map((r) => (
               <tr key={r.month} className="border-b border-slate-50" style={r.month < NEW_SYSTEM_START ? { background: "#fffbeb" } : undefined}>
@@ -3159,7 +3159,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           const isFT = rider.type === "Full Time";
           if (hist.length === 0) return <p className="text-sm text-slate-400">{t("لا يوجد سجل عمل بعد", "No work history yet")}</p>;
           return (
-            <div className="overflow-x-auto"><table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
               <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("التاريخ"), tr("الطلبات"), tr("COD"), ...(isFT ? [tr("ساعات الدوام"), t("قبول %", "Accept %")] : []), t("الدفع", "Payment")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
               <tbody>
                 {hist.map((h, i) => { const capped = Math.min(h.hours, HOURS_CAP); const over = h.hours > HOURS_CAP; const hRed = isFT && h.hours > 0 && h.hours < HOURS_MIN; const aRed = isFT && h.accept > 0 && h.accept < ACCEPT_MIN; return (
@@ -3206,7 +3206,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           return (
             <div className="mt-4">
               <h4 className="font-bold text-slate-700 text-sm mb-2">{t("الملخص الشهري", "Monthly Summary")}</h4>
-              <div className="overflow-x-auto"><table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
                 <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("الطلبات", "Orders"), t("COD", "COD"), ...(isFT ? [t("إجمالي الساعات", "Hours"), t("متوسط القبول", "Avg accept")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>{months.map((mo) => { const v = byMonth[mo]; const avg = v.accCnt ? Math.round(v.accSum / v.accCnt) : 0; return (
                   <tr key={mo} className="border-b border-slate-50">
@@ -3252,7 +3252,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           <h3 className="font-bold text-slate-800">{tr("سجل التحويلات")}</h3>
           <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-64 pr-9 pl-3" placeholder={t("بحث برقم المرجع / التاريخ / المبلغ", "search reference / date / amount")} value={histQ} name="mrd-hist-search" autoComplete="off" autoCorrect="off" spellCheck={false} onChange={(e) => setHistQ(e.target.value)} /></div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("التاريخ"), tr("المبلغ"), tr("المرجع"), t("الإيصال", "Receipt"), tr("الحالة"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {txMonths.flatMap((mkey) => [
@@ -3452,7 +3452,7 @@ function ShiftsWindow({ db, save, company = null }) {
             <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-44" placeholder={t("اسم / رقم / ID", "name / phone / ID")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
             {[tr("المندوب"), tr("الشركة"), tr("النوع"), tr("وقت الشفت"), tr("الأيام"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
           </tr></thead>
@@ -3605,7 +3605,7 @@ function Employees({ db, save, user }) {
         <Btn onClick={() => setEditing(blank)}><Plus size={16} /> {tr("إضافة موظف")}</Btn>
       </div>
       <Card className="overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
             {[tr("الموظف"), tr("الهاتف"), tr("الشركة"), tr("المنطقة"), tr("المسؤولية"), tr("المناديب"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
@@ -3752,7 +3752,7 @@ function ArchiveWindow({ db, save, onRefresh }) {
         {archive.length > 0 && <Btn kind="ghost" onClick={purgeAll} className="!text-red-600"><Trash2 size={16} /> {t("إفراغ الأرشيف", "Empty Archive")}</Btn>}
       </div>
       <Card className="overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
             {[tr("المندوب"), "ID", tr("الهاتف"), tr("الشركة"), t("تاريخ الأرشفة", "Archived"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
@@ -3909,7 +3909,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
             {(q || statusF !== "all" || assigneeF !== "all" || areaF !== "all" || dateF) && <Btn kind="ghost" onClick={() => { setQ(""); setStatusF("all"); setAssigneeF("all"); setAreaF("all"); setDateF(""); }}>{t("مسح الفلاتر", "Clear")}</Btn>}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المندوب", "Driver"), t("الهاتف", "Phone"), t("المنطقة", "Area"), t("البطاقة", "ID"), t("الموظف", "Assignee"), t("الحالة", "Status"), t("التقدّم", "Progress"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {rows.slice((gpage - 1) * GPER, gpage * GPER).map((r) => { const st = regStatus(r); return (
@@ -4193,7 +4193,7 @@ function HRWindow({ db, save }) {
               <Btn onClick={() => { setForm(blankEmp); setModal("emp"); }}><Plus size={16} /> إضافة موظف</Btn>
             </div>
           </div>
-          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["الاسم", "الجوال", "المشروع", "النوع", "الحالة", "الأساسي", ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {hr.employees.filter((e) => e.name.includes(q) || (e.mobile || "").includes(q) || (e.civilId || "").includes(q)).map((e) => (
@@ -4236,10 +4236,10 @@ function HRWindow({ db, save }) {
             </Card>
             <Card className="p-4">
               <div className="flex items-center justify-between mb-2"><h3 className="font-bold text-slate-800 text-sm">ملخص الإجازات</h3><Btn size="sm" onClick={() => { setForm({ empId: e.id, typeId: "annual", from: todayStr(), to: todayStr() }); setModal("leave"); }}><Plus size={14} /> طلب إجازة</Btn></div>
-              <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["النوع", "المستحق", "المستخدم", "معلّقة", "المتبقي"].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+              <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["النوع", "المستحق", "المستخدم", "معلّقة", "المتبقي"].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>{typesFor(e.id).map((ty) => { const b = balance(e.id, ty.id); return <tr key={ty.id} className="border-b border-slate-50"><td className="py-2 px-3">{ty.nameAr}</td><td className="px-3">{b.ent || "—"}</td><td className="px-3">{b.used}</td><td className="px-3">{b.pend}</td><td className="px-3 font-semibold">{b.remaining ?? "—"}</td></tr>; })}</tbody></table></div>
             </Card>
-            {salHist.length > 0 && <Card className="p-4"><h3 className="font-bold text-slate-800 text-sm mb-2">سجل الرواتب</h3><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["الشهر", "الأساسي", "البدلات", "الاستقطاعات", "الصافي", "الحالة"].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead><tbody>{salHist.map((h) => <tr key={h.month} className="border-b border-slate-50"><td className="py-2 px-3" dir="ltr">{h.month}</td><td className="px-3">{omr(h.it.basic)}</td><td className="px-3">{omr(h.it.allowances)}</td><td className="px-3">{omr(h.it.deductions)}</td><td className="px-3 font-semibold">{omr(h.it.basic + h.it.allowances - h.it.deductions)}</td><td className="px-3">{badge(h.it.status)}</td></tr>)}</tbody></table></div></Card>}
+            {salHist.length > 0 && <Card className="p-4"><h3 className="font-bold text-slate-800 text-sm mb-2">سجل الرواتب</h3><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["الشهر", "الأساسي", "البدلات", "الاستقطاعات", "الصافي", "الحالة"].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead><tbody>{salHist.map((h) => <tr key={h.month} className="border-b border-slate-50"><td className="py-2 px-3" dir="ltr">{h.month}</td><td className="px-3">{omr(h.it.basic)}</td><td className="px-3">{omr(h.it.allowances)}</td><td className="px-3">{omr(h.it.deductions)}</td><td className="px-3 font-semibold">{omr(h.it.basic + h.it.allowances - h.it.deductions)}</td><td className="px-3">{badge(h.it.status)}</td></tr>)}</tbody></table></div></Card>}
           </div>
         );
       })()}
@@ -4254,7 +4254,7 @@ function HRWindow({ db, save }) {
             </div>
             <Btn onClick={() => { setForm({ typeId: "annual", from: todayStr(), to: todayStr() }); setModal("leave"); }}><Plus size={16} /> طلب إجازة</Btn>
           </div>
-          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["الموظف", "النوع", "من", "إلى", "الأيام", "الحالة", ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {hr.leaveRequests.filter((r) => (!flt.type || r.typeId === flt.type) && (!flt.status || r.status === flt.status)).map((r) => (
@@ -4279,7 +4279,7 @@ function HRWindow({ db, save }) {
             {run && <Btn kind="ghost" onClick={() => exportExcel(run.items.map((it) => { const e = emp(it.empId); return { الموظف: nm(it.empId), الأساسي: it.basic, البدلات: it.allowances, الاستقطاعات: it.deductions, الصافي: it.basic + it.allowances - it.deductions, الحالة: it.status, صاحب_الحساب: e ? e.holder : "", البنك: e ? e.bankName : "", الآيبان: e ? e.iban : "" }; }), "Payroll_" + pmonth)}><Download size={15} /> تصدير</Btn>}
           </div>
           {!run ? <Card className="p-6"><p className="text-center text-slate-400 text-sm">لا يوجد كشف لهذا الشهر — اضغط توليد.</p></Card> : (
-            <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+            <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
               <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["الموظف", "الأساسي", "البدلات", "الاستقطاعات", "الصافي", "الحالة", ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
               <tbody>
                 {run.items.map((it) => {
@@ -4325,7 +4325,7 @@ function HRWindow({ db, save }) {
       {tab === "settings" && (
         <div className="space-y-3">
           <div className="flex justify-end"><Btn onClick={() => { setForm({ paid: true, legal: false, active: true, ent: 0 }); setModal("ltype"); }}><Plus size={16} /> إضافة نوع</Btn></div>
-          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm">
+          <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["نوع الإجازة", "المستحق", "مدفوعة", "المرجع", "مفعّلة", ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{hr.leaveTypes.map((x) => (
               <tr key={x.id} className="border-b border-slate-50">
@@ -4428,7 +4428,7 @@ function BanksWindow({ db, save }) {
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3 text-sm">{t("البنوك المضافة", "Added Banks")} ({custom.length})</h3>
         {custom.length === 0 ? <p className="text-sm text-slate-400">{t("لم تُضف بنوك مخصصة بعد. القائمة الأساسية (27 بنك) متوفرة دائماً.", "No custom banks yet. The base list (27 banks) is always available.")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("اسم البنك", "Bank"), t("سويفت", "SWIFT"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("اسم البنك", "Bank"), t("سويفت", "SWIFT"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{custom.map((b) => <tr key={b.name} className="border-b border-slate-50"><td className="py-2 px-3 font-semibold">{b.name}</td><td className="px-3" dir="ltr">{b.swift || "—"}</td><td className="px-3"><button onClick={() => del(b.name)} className="text-red-500">✕</button></td></tr>)}</tbody>
           </table></div>
         )}
@@ -4468,7 +4468,7 @@ function MyHRView({ db, save, user }) {
       <div className="flex items-center gap-2"><span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.navy }}><CalendarCheck size={18} color="#fff" /></span><h2 className="font-extrabold text-lg text-slate-800">{t("إجازاتي ورواتبي", "My Leave & Pay")}</h2></div>
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("أرصدة إجازاتي", "My Leave Balances")}</h3>
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("المستحق", "Entitled"), t("المستخدم", "Used"), t("معلّقة", "Pending"), t("المتبقي", "Remaining")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("المستحق", "Entitled"), t("المستخدم", "Used"), t("معلّقة", "Pending"), t("المتبقي", "Remaining")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>{types.map((ty) => { const b = bal(ty.id); return <tr key={ty.id} className="border-b border-slate-50"><td className="py-2 px-3">{ty.nameAr}</td><td className="px-3">{b.ent || "—"}</td><td className="px-3">{b.used}</td><td className="px-3">{b.pend}</td><td className="px-3 font-bold">{b.remaining ?? "—"}</td></tr>; })}</tbody></table></div>
       </Card>
       <Card className="p-5">
@@ -4487,14 +4487,14 @@ function MyHRView({ db, save, user }) {
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("طلباتي", "My Requests")}</h3>
         {reqs.length === 0 ? <p className="text-sm text-slate-400">{t("لا توجد طلبات", "No requests")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("من", "From"), t("إلى", "To"), t("الأيام", "Days"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("النوع", "Type"), t("من", "From"), t("إلى", "To"), t("الأيام", "Days"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{reqs.slice().reverse().map((r) => { const ty = hr.leaveTypes.find((x) => x.id === r.typeId); return <tr key={r.id} className="border-b border-slate-50"><td className="py-2 px-3">{ty ? ty.nameAr : r.typeId}{r.status === "rejected" && r.rejectReason && <div className="text-[10px] text-red-600">{r.rejectReason}</div>}</td><td className="px-3" dir="ltr">{r.from}</td><td className="px-3" dir="ltr">{r.to}</td><td className="px-3">{r.days}</td><td className="px-3"><Pill color={stColor[r.status]}>{stName[r.status] || r.status}</Pill></td></tr>; })}</tbody></table></div>
         )}
       </Card>
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("رواتبي", "My Payslips")}</h3>
         {pays.length === 0 ? <p className="text-sm text-slate-400">{t("لا يوجد كشوفات", "No payslips")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("الأساسي", "Basic"), t("البدلات", "Allow."), t("الاستقطاعات", "Deduct."), t("الصافي", "Net"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap"><thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الشهر", "Month"), t("الأساسي", "Basic"), t("البدلات", "Allow."), t("الاستقطاعات", "Deduct."), t("الصافي", "Net"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>{pays.map((p) => <tr key={p.month} className="border-b border-slate-50"><td className="py-2 px-3" dir="ltr">{p.month}</td><td className="px-3">{omr(p.item.basic)}</td><td className="px-3">{omr(p.item.allowances)}</td><td className="px-3">{omr(p.item.deductions)}</td><td className="px-3 font-bold">{omr(p.item.basic + p.item.allowances - p.item.deductions)}</td><td className="px-3">{p.item.status === "paid" ? <Pill color="#0f9d58">{t("مدفوع", "Paid")}</Pill> : <Pill color="#d97706">{t("قيد المعالجة", "Processing")}</Pill>}</td></tr>)}</tbody></table></div>
         )}
       </Card>
