@@ -425,14 +425,7 @@ function classifyTransfer(t, bank) {
 }
 
 /* ---------- seed & db ---------- */
-const SEED_RIDERS = [
-  { id: uid(), name: "أحمد البلوشي", phone: "92001001", area: "صحار", company: "Snoonu", type: "Freelancer", joinDate: "2025-01-12", status: "Active", bank: "OM12 0001 1234", notes: "", username: "92001001", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "سعيد الراشدي", phone: "92001002", area: "صحار", company: "Snoonu", type: "Freelancer", joinDate: "2025-02-03", status: "Active", bank: "OM12 0001 5678", notes: "", username: "92001002", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "خالد المعمري", phone: "93002001", area: "نزوى", company: "Snoonu", type: "Freelancer", joinDate: "2025-03-20", status: "Active", bank: "", notes: "", username: "93002001", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "ياسر الهنائي", phone: "93002002", area: "صلالة", company: "Snoonu", type: "Full Time", joinDate: "2024-11-01", status: "Active", bank: "OM55 0009 2211", notes: "موظف ثابت", username: "93002002", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "ماجد الحارثي", phone: "94003001", area: "مسقط", company: "Aramex", type: "Freelancer", joinDate: "2025-04-10", status: "Active", bank: "", notes: "", username: "94003001", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "عبدالله الكندي", phone: "94003002", area: "مسقط", company: "Aramex", type: "Full Time", joinDate: "2025-01-05", status: "Active", bank: "OM77 0002 8899", notes: "", username: "94003002", password: "1234", lastWorked: "2025-05-01" },
-];
+const SEED_RIDERS = [];
 const emptyBank = () => ({ Talabat: [], Snoonu: [], Aramex: [] });
 const emptyDB = () => ({ version: 3, riders: SEED_RIDERS, imports: [], transfers: [], payouts: [], bankRows: emptyBank(), attendance: {}, excuses: {}, employees: [], staff: {}, registrations: [], regStaff: [], areas: [], customBanks: [], hr: { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] } });
 function normalizeDB(db) {
@@ -2493,7 +2486,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("الطلبات", "Orders"), t("الساعات", "Hours"), ...(lbScope === "overall" ? [t("أيام العمل", "Days")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {lbSorted.map((x, i) => (
@@ -2521,7 +2514,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), tr("المنطقة"), t("النوع", "Type"), t("الساعات", "Hours"), t("الطلبات", "Orders"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {hrSorted.map((x, i) => { const full = hrScope === "day" ? x.hours >= FULL_DAY : true; const rr = rIdx[x.rid]; return (
@@ -2542,7 +2535,7 @@ function OperationsTab({ company, db }) {
 
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
-        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المنطقة", "Area"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("الساعات", "Hours"), t("طلب/ساعة", "Orders/hr")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {areaRows.map((g) => (
