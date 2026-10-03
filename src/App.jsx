@@ -359,9 +359,7 @@ const STAFF_USERS = [
   { username: "admin", password: "admin123", role: "Admin", name: "مدير النظام", company: null },
   { username: "ops", password: "ops123", role: "Operations Manager", name: "محمد الشيدي", company: null },
   { username: "finance", password: "fin123", role: "Finance", name: "قسم المالية", company: null },
-  { username: "talabat", password: "tal123", role: "Supervisor", name: "مشرف الطلبات", company: "Talabat" },
   { username: "snoonu", password: "sno123", role: "Supervisor", name: "مشرف سنونو", company: "Snoonu" },
-  { username: "aramex", password: "ara123", role: "Supervisor", name: "مشرف أرامكس", company: "Aramex" },
 ];
 
 const STAFF_BY_EMAIL = {
@@ -369,9 +367,7 @@ const STAFF_BY_EMAIL = {
   "admin@mrd.app": { role: "Admin", name: "مدير النظام", company: null },
   "ops@mrd.app": { role: "Operations Manager", name: "مدير العمليات", company: null },
   "finance@mrd.app": { role: "Finance", name: "المالية", company: null },
-  "talabat@mrd.app": { role: "Supervisor", name: "مشرف الطلبات", company: "Talabat" },
   "snoonu@mrd.app": { role: "Supervisor", name: "مشرف سنونو", company: "Snoonu" },
-  "aramex@mrd.app": { role: "Supervisor", name: "مشرف أرامكس", company: "Aramex" },
 };
 
 /* ---------- helpers ---------- */
@@ -430,8 +426,8 @@ function classifyTransfer(t, bank) {
 
 /* ---------- seed & db ---------- */
 const SEED_RIDERS = [
-  { id: uid(), name: "أحمد البلوشي", phone: "92001001", area: "صحار", company: "Talabat", type: "Freelancer", joinDate: "2025-01-12", status: "Active", bank: "OM12 0001 1234", notes: "", username: "92001001", password: "1234", lastWorked: todayStr() },
-  { id: uid(), name: "سعيد الراشدي", phone: "92001002", area: "صحار", company: "Talabat", type: "Freelancer", joinDate: "2025-02-03", status: "Active", bank: "OM12 0001 5678", notes: "", username: "92001002", password: "1234", lastWorked: todayStr() },
+  { id: uid(), name: "أحمد البلوشي", phone: "92001001", area: "صحار", company: "Snoonu", type: "Freelancer", joinDate: "2025-01-12", status: "Active", bank: "OM12 0001 1234", notes: "", username: "92001001", password: "1234", lastWorked: todayStr() },
+  { id: uid(), name: "سعيد الراشدي", phone: "92001002", area: "صحار", company: "Snoonu", type: "Freelancer", joinDate: "2025-02-03", status: "Active", bank: "OM12 0001 5678", notes: "", username: "92001002", password: "1234", lastWorked: todayStr() },
   { id: uid(), name: "خالد المعمري", phone: "93002001", area: "نزوى", company: "Snoonu", type: "Freelancer", joinDate: "2025-03-20", status: "Active", bank: "", notes: "", username: "93002001", password: "1234", lastWorked: todayStr() },
   { id: uid(), name: "ياسر الهنائي", phone: "93002002", area: "صلالة", company: "Snoonu", type: "Full Time", joinDate: "2024-11-01", status: "Active", bank: "OM55 0009 2211", notes: "موظف ثابت", username: "93002002", password: "1234", lastWorked: todayStr() },
   { id: uid(), name: "ماجد الحارثي", phone: "94003001", area: "مسقط", company: "Aramex", type: "Freelancer", joinDate: "2025-04-10", status: "Active", bank: "", notes: "", username: "94003001", password: "1234", lastWorked: todayStr() },
@@ -493,20 +489,30 @@ function resizeImage(file, max = 900) {
   return new Promise((res) => {
     const rd = new FileReader();
     rd.onload = () => {
+      const raw = rd.result; // الملف الأصلي كما هو (احتياطي إن فشل الرسم)
       const img = new Image();
+      // لو تعذّر فك الصورة (مثلاً HEIC من الآيفون) نُخزّن الأصل بدل صورة سوداء
+      img.onerror = () => res(raw);
       img.onload = () => {
-        const c = document.createElement("canvas");
-        let w = img.width, h = img.height;
-        if (w > max) { h = Math.round((h * max) / w); w = max; }
-        c.width = w; c.height = h;
-        const ctx = c.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        res(c.toDataURL("image/jpeg", 0.85));
+        try {
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (!w || !h) { res(raw); return; }        // أبعاد صفرية = فشل الفك → الأصل
+          if (w > max) { h = Math.round((h * max) / w); w = max; }
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          const ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";                 // خلفية بيضاء بدل الشفاف (الشفاف يصير أسود في JPEG)
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = c.toDataURL("image/jpeg", 0.85);
+          // لو الناتج قصير جداً فالرسم فشل فعلياً → نرجع الأصل
+          res(out && out.length > 1000 ? out : raw);
+        } catch (e) { res(raw); }
       };
-      img.src = rd.result;
+      img.src = raw;
     };
+    rd.onerror = () => res(null);
     rd.readAsDataURL(file);
   });
 }
@@ -958,7 +964,7 @@ function GlobalDashboard({ db, onOpen }) {
    ============================================================ */
 function RiderBulkAdd({ company, existing, onAdd, onClose }) {
   const [mode, setMode] = useState("paste");
-  const [comp, setComp] = useState(company || "Talabat");
+  const [comp, setComp] = useState(company || "Snoonu");
   const [type, setType] = useState("Freelancer");
   const [area, setArea] = useState("");
   const [pw, setPw] = useState("1234");
@@ -1088,7 +1094,7 @@ function Riders({ db, save, company, user }) {
   const scoped = db.riders.filter((r) => (!company || r.company === company));
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
   const areas = Array.from(new Set(scoped.map((r) => r.area).filter(Boolean))).sort();
-  const blank = { name: "", phone: "", companyId: "", civil: "", area: "", commission: "", company: company || "Talabat", type: "Freelancer", joinDate: todayStr(), contractDate: "", status: "Active", bank: "", bankName: "", swift: "", notes: "", email: "", username: "", password: "1234", codAgent: "", nationality: "", vehicleType: "" };
+  const blank = { name: "", phone: "", companyId: "", civil: "", area: "", commission: "", company: company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "", status: "Active", bank: "", bankName: "", swift: "", notes: "", email: "", username: "", password: "1234", codAgent: "", nationality: "", vehicleType: "" };
   const list = scoped.filter((r) =>
     (company || cf === "all" || r.company === cf) &&
     (af === "all" || (r.area || "") === af) &&
@@ -3506,7 +3512,7 @@ function Employees({ db, save, user }) {
   const [editing, setEditing] = useState(null);
   const emps = db.employees || [];
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
-  const blank = { name: "", phone: "", email: "", company: "Talabat", area: "", roleType: "Supervisor", scope: "all", riderIds: [], notes: "" };
+  const blank = { name: "", phone: "", email: "", company: "Snoonu", area: "", roleType: "Supervisor", scope: "all", riderIds: [], notes: "" };
   const list = emps.filter((e) => (cf === "all" || e.company === cf) && (af === "all" || (e.area || "") === af) && (e.name.includes(q) || (e.phone || "").includes(q)));
   const submit = () => {
     const e = { ...editing };
@@ -3518,7 +3524,7 @@ function Employees({ db, save, user }) {
   const candidates = editing ? db.riders.filter((r) => r.company === editing.company && (!editing.area || (r.area || "") === editing.area)) : [];
   const toggleRider = (id) => setEditing((e) => ({ ...e, riderIds: e.riderIds.includes(id) ? e.riderIds.filter((x) => x !== id) : [...e.riderIds, id] }));
 
-  const blankAcc = { email: "", password: "", name: "", role: "Supervisor", company: "Talabat", regAgent: false };
+  const blankAcc = { email: "", password: "", name: "", role: "Supervisor", company: "Snoonu", regAgent: false };
   const [showAcc, setShowAcc] = useState(false);
   const [acc, setAcc] = useState(blankAcc);
   const [accMsg, setAccMsg] = useState("");
@@ -3531,7 +3537,7 @@ function Employees({ db, save, user }) {
     supabase.functions.invoke("create-staff", { body: { email, password: acc.password, secret: STAFF_FN_SECRET } }).then(({ data, error }) => {
       setAccBusy(false);
       if (error || (data && data.error)) return setAccMsg((data && data.error) ? String(data.error) : t("تعذّر إنشاء الحساب — تأكد من نشر الدالة", "Failed to create account — check the function is deployed"));
-      const company = acc.role === "Supervisor" ? (acc.company || "Talabat") : null;
+      const company = acc.role === "Supervisor" ? (acc.company || "Snoonu") : null;
       save({ ...db, staff: { ...(db.staff || {}), [email]: { role: acc.role, name: acc.name || email, company, regAgent: !!acc.regAgent } } });
       setAccMsg(t("✅ تم إنشاء الحساب بنجاح", "✅ Account created successfully"));
       setAcc(blankAcc);
@@ -3563,7 +3569,7 @@ function Employees({ db, save, user }) {
     if (!window.confirm(t("تغيير دور " + (a.name || a.email) + " إلى: " + roleName + "؟", "Change role of " + (a.name || a.email) + " to: " + roleName + "?"))) return;
     const next = { ...cur, role: newRole };
     if (newRole !== "Supervisor") next.company = null; // الشركة تخص المشرف فقط
-    else if (!next.company) next.company = "Talabat";
+    else if (!next.company) next.company = "Snoonu";
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: next } });
   };
   const changeCompany = (a, newCompany) => {
@@ -3634,7 +3640,7 @@ function Employees({ db, save, user }) {
             <div key={a.email} className="flex items-center justify-between border-b border-slate-50 py-1.5 flex-wrap gap-2">
               <span dir="ltr" className="font-mono text-xs text-slate-700">{a.email}</span>
               <span className="flex items-center gap-2">
-                {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.role} onChange={(e) => changeRole(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: BRAND.blue }} title={t("تغيير الدور", "Change role")}><option value="Admin">{roleLabel("Admin")}</option><option value="Operations Manager">{roleLabel("Operations Manager")}</option><option value="Finance">{roleLabel("Finance")}</option><option value="Supervisor">{roleLabel("Supervisor")}</option></select> : <Pill color={BRAND.blue}>{roleLabel(a.role)}</Pill>}{isAdmin && a.role === "Supervisor" && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.company || "Talabat"} onChange={(e) => changeCompany(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: CMETA[a.company]?.color || "#64748b" }} title={t("تغيير الشركة", "Change company")}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select> : (a.company ? companyPill(a.company) : null)}{a.regAgent ? <Pill color="#0f9d58">{t("متابع تسجيل", "Reg agent")}</Pill> : null}
+                {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.role} onChange={(e) => changeRole(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: BRAND.blue }} title={t("تغيير الدور", "Change role")}><option value="Admin">{roleLabel("Admin")}</option><option value="Operations Manager">{roleLabel("Operations Manager")}</option><option value="Finance">{roleLabel("Finance")}</option><option value="Supervisor">{roleLabel("Supervisor")}</option></select> : <Pill color={BRAND.blue}>{roleLabel(a.role)}</Pill>}{isAdmin && a.role === "Supervisor" && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.company || "Snoonu"} onChange={(e) => changeCompany(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: CMETA[a.company]?.color || "#64748b" }} title={t("تغيير الشركة", "Change company")}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select> : (a.company ? companyPill(a.company) : null)}{a.regAgent ? <Pill color="#0f9d58">{t("متابع تسجيل", "Reg agent")}</Pill> : null}
                 {a.disabled ? <Pill color="#c0341d">{t("معطّل", "Disabled")}</Pill> : null}
                 {a.codAgentPerm ? <Pill color={BRAND.blue}>{t("متابع تحويلات", "Transfers agent")}</Pill> : null}
                 {isAdmin && <button onClick={() => toggleAgent(a)} className="text-xs font-semibold" style={{ color: a.regAgent ? "#c0341d" : "#0f9d58" }} title={t("تفعيل/إلغاء متابعة التسجيل", "Toggle registration follow-up")}>{a.regAgent ? t("إلغاء متابعة التسجيل", "Unset reg") : t("متابع تسجيل", "Reg agent")}</button>}
@@ -3673,7 +3679,7 @@ function Employees({ db, save, user }) {
           </Field>
           {acc.role === "Supervisor" && (
             <Field label={t("الشركة", "Company")}>
-              <select className={inputCls} value={acc.company || "Talabat"} onChange={(e) => setAcc({ ...acc, company: e.target.value })}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>
+              <select className={inputCls} value={acc.company || "Snoonu"} onChange={(e) => setAcc({ ...acc, company: e.target.value })}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>
             </Field>
           )}
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none"><input type="checkbox" checked={!!acc.regAgent} onChange={(e) => setAcc({ ...acc, regAgent: e.target.checked })} /> {t("مخوّل بمتابعة تسجيل المناديب", "Authorized to follow driver registrations")}</label>
@@ -3829,7 +3835,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
     if (!regStepsDone(r)) return;
     const rider = {
       id: uid(), name: r.fullName, phone: r.phone, companyId: r.driverId || "", civil: r.idNumber || "", area: r.wilaya || "",
-      commission: "", company: r.company || "Talabat", type: "Freelancer", joinDate: todayStr(), contractDate: "",
+      commission: "", company: r.company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "",
       status: "Active", bank: r.bank || "", bankName: r.bankName || "", swift: r.swift || "", nationality: r.nationality || "", vehicleType: r.vehicleType || "",
       email: r.email || "", notes: r.notes || "", username: r.username || r.phone, password: r.password || "1234", lastWorked: null,
     };
@@ -4092,7 +4098,7 @@ function HRWindow({ db, save }) {
   const onLeaveOn = (d) => hr.leaveRequests.filter((r) => r.status === "approved" && r.from <= d && r.to >= d);
 
   /* ---- employees ---- */
-  const blankEmp = { name: "", mobile: "", civilId: "", nationality: "OM", gender: "M", jobTitle: "", empType: "fulltime", dept: "Talabat", joinDate: todayStr(), status: "active", basic: "", allowances: "", bankName: "", holder: "", acct: "", iban: "", notes: "", email: "", username: "", password: "" };
+  const blankEmp = { name: "", mobile: "", civilId: "", nationality: "OM", gender: "M", jobTitle: "", empType: "fulltime", dept: "Snoonu", joinDate: todayStr(), status: "active", basic: "", allowances: "", bankName: "", holder: "", acct: "", iban: "", notes: "", email: "", username: "", password: "" };
   const saveEmp = () => {
     if (!form.name) return alert("الاسم مطلوب");
     const e = { ...form, basic: Number(form.basic) || 0, allowances: Number(form.allowances) || 0, deductions: form.deductions || 0 };
@@ -4342,7 +4348,7 @@ function HRWindow({ db, save }) {
           <Field label="الرقم المدني"><input className={inputCls} dir="ltr" value={form.civilId || ""} onChange={(e) => setForm({ ...form, civilId: e.target.value })} /></Field>
           <Field label="الجنسية"><input className={inputCls} value={form.nationality || ""} onChange={(e) => setForm({ ...form, nationality: e.target.value })} /></Field>
           <Field label="الجنس"><select className={inputCls} value={form.gender || "M"} onChange={(e) => setForm({ ...form, gender: e.target.value })}><option value="M">ذكر</option><option value="F">أنثى</option></select></Field>
-          <Field label="المشروع"><select className={inputCls} value={form.dept || "Talabat"} onChange={(e) => setForm({ ...form, dept: e.target.value })}>{["Talabat", "Snoonu", "Aramex", "SmartBox", "Office"].map((d) => <option key={d} value={d}>{d}</option>)}</select></Field>
+          <Field label="المشروع"><select className={inputCls} value={form.dept || "Snoonu"} onChange={(e) => setForm({ ...form, dept: e.target.value })}>{["Snoonu", "SmartBox", "Office"].map((d) => <option key={d} value={d}>{d}</option>)}</select></Field>
           <Field label="المسمى الوظيفي"><input className={inputCls} value={form.jobTitle || ""} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} /></Field>
           <Field label="النوع"><select className={inputCls} value={form.empType || "fulltime"} onChange={(e) => setForm({ ...form, empType: e.target.value })}><option value="fulltime">دوام كامل</option><option value="freelancer">فريلانسر</option><option value="undertraining">تحت التدريب</option></select></Field>
           <Field label="تاريخ الالتحاق"><input type="date" className={inputCls} value={form.joinDate || todayStr()} onChange={(e) => setForm({ ...form, joinDate: e.target.value })} /></Field>
