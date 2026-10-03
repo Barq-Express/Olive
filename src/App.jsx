@@ -455,6 +455,9 @@ function normalizeDB(db) {
     codWindow: db.codWindow || { enabled: true, start: "00:00", end: "15:00" }, // نافذة رفع التحويلات (توقيت عمان)
     codAdjustments: db.codAdjustments || [],
     codDeductions: db.codDeductions || [], // خصومات COD من الراتب (نظام شهري)
+    payNowOnly: db.payNowOnly,
+    balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
+    balanceIds: db.balanceIds || [],
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
   };
 }
@@ -1565,6 +1568,8 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const [rejFor, setRejFor] = useState(null);
   const [rejReason, setRejReason] = useState("");
   const [decidingId, setDecidingId] = useState(null);
+  const [selIds, setSelIds] = useState([]);       // تحويلات محددة للموافقة الجماعية
+  const [batchBusy, setBatchBusy] = useState(false);
   // خصم COD من الراتب (نظام شهري)
   const [dedFor, setDedFor] = useState(null);
   const [dedAmount, setDedAmount] = useState("");
@@ -1670,6 +1675,23 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     });
   };
   const pending = list.filter((t) => !t.reconLabel && t.status !== "Rejected" && t.status !== "Approved").length; // قيد المراجعة = لم يُبَت فيه بعد (نفس معيار الصفوف)
+  // صفّ قابل للموافقة الجماعية: تحت صلاحية المستخدم + قيد المراجعة (لم يُبَت فيه)
+  const isPendingRow = (tf) => canControl(tf.riderId) && !tf.reconLabel && tf.status !== "Approved" && tf.status !== "Rejected";
+  const approveSelected = async () => {
+    const me = (user && (user.name || user.email)) || "";
+    const ids = selIds.filter((id) => { const tf = db.transfers.find((x) => x.id === id); return tf && isPendingRow(tf); });
+    if (ids.length === 0) { alert(t("لا توجد تحويلات محددة قابلة للموافقة", "No selected transfers available to approve")); return; }
+    if (!window.confirm(t("الموافقة على " + ids.length + " تحويل؟", "Approve " + ids.length + " transfer(s)?"))) return;
+    setBatchBusy(true);
+    let fail = 0;
+    for (const id of ids) {
+      const res = await supabase.rpc("admin_decide_transfer", { p_id: id, p_status: "Approved", p_by: me, p_label: tr("قبول يدوي"), p_reason: "" });
+      if (res && res.error) fail++;
+    }
+    setBatchBusy(false); setSelIds([]);
+    if (fail > 0) alert(t("تعذّر قبول " + fail + " تحويل، حاول مرة أخرى", "Failed to approve " + fail + " transfer(s), try again"));
+    if (onRefresh) onRefresh();
+  };
   const [q, setQ] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [agentF, setAgentF] = useState("all");
@@ -1778,14 +1800,23 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
             ); })}
           </div>
         ); })()}
+        {selIds.length > 0 && (
+          <div className="flex items-center gap-3 mb-3 p-2.5 rounded-lg flex-wrap" style={{ background: "#ecfdf5", border: "1px solid #a7f3d0" }}>
+            <span className="text-sm font-semibold" style={{ color: "#047857" }}>{t("محدّد: ", "Selected: ")}{selIds.length}</span>
+            <Btn size="sm" onClick={approveSelected} disabled={batchBusy}><CheckCircle2 size={14} /> {batchBusy ? t("جارٍ الموافقة...", "Approving...") : t("موافقة على المحدّد", "Approve selected")}</Btn>
+            <button onClick={() => setSelIds([])} className="text-xs font-semibold text-slate-500">{t("إلغاء التحديد", "Clear")}</button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
+              {(() => { const pp = pageList.filter(isPendingRow); const allSel = pp.length > 0 && pp.every((tf) => selIds.includes(tf.id)); return <th className="py-2 px-3"><input type="checkbox" checked={allSel} disabled={pp.length === 0} onChange={(e) => { const pids = pp.map((tf) => tf.id); setSelIds((prev) => e.target.checked ? Array.from(new Set([...prev, ...pids])) : prev.filter((id) => !pids.includes(id))); }} title={t("تحديد كل قيد المراجعة في الصفحة", "Select all under-review on page")} /></th>; })()}
               {[tr("المندوب"), tr("الهاتف"), "ID", tr("المبلغ"), tr("المرجع"), tr("التاريخ"), tr("الإيصال"), tr("التصنيف"), tr("إجراء")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
             </tr></thead>
             <tbody>
               {pageList.map((tf) => (
                 <tr key={tf.id} className="border-b border-slate-50">
+                  <td className="px-3">{isPendingRow(tf) ? <input type="checkbox" checked={selIds.includes(tf.id)} onChange={(e) => setSelIds((prev) => e.target.checked ? [...prev, tf.id] : prev.filter((id) => id !== tf.id))} /> : null}</td>
                   <td className="py-2 px-3 font-semibold text-slate-800">{riderName(tf.riderId)}</td>
                   <td className="px-3 text-slate-500" dir="ltr">{riderPhone(tf.riderId)}</td>
                   <td className="px-3 text-slate-500">{riderCompanyId(tf.riderId)}</td>
@@ -1813,8 +1844,8 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                   </td>
                 </tr>
               ))}
-              {pageList.length === 0 && <tr><td colSpan={9} className="py-6 text-center text-slate-400">{tr("لا توجد تحويلات")}</td></tr>}
-              {list.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">{tr("لا توجد تحويلات")}</td></tr>}
+              {pageList.length === 0 && <tr><td colSpan={10} className="py-6 text-center text-slate-400">{tr("لا توجد تحويلات")}</td></tr>}
+              {list.length === 0 && <tr><td colSpan={10} className="py-6 text-center text-slate-400">{tr("لا توجد تحويلات")}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2958,6 +2989,8 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const _mon = riderMonthly(db, riderId);
   const owedNew = _r3(_mon.filter((x) => x.month >= NEW_SYSTEM_START).reduce((s, x) => s + (x.cod - x.ded - x.paid), 0));
   const owedOld = _r3(_mon.filter((x) => x.month < NEW_SYSTEM_START).reduce((s, x) => s + (x.cod - x.ded - x.paid), 0));
+  // إظهار بطاقة "رصيد COD الشهري" للمندوب: يتحكم فيها الأدمن (مخفي افتراضياً)
+  const showBalance = db.balanceMode === "all" || (db.balanceMode === "selected" && Array.isArray(db.balanceIds) && db.balanceIds.includes(riderId));
   const [bankForm, setBankForm] = useState({ bankName: rider ? (rider.bankName || "") : "", bank: rider ? (rider.bank || "") : "", swift: rider ? (rider.swift || "") : "", holder: rider ? (rider.holder || "") : "" });
   const [bankMsg, setBankMsg] = useState("");
   const [bankBusy, setBankBusy] = useState(false);
@@ -2977,8 +3010,10 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const txMonths = Object.keys(txByMonth).sort().reverse();
   const payNowOnly = (db.payNowOnly !== undefined && db.payNowOnly !== null) ? db.payNowOnly : PAY_NOW_ONLY;
   // حالة دفع شيت معيّن (حسب مطابقة التاريخ): none | pending | approved | rejected
+  const normDay = (d) => { const s = String(d || "").slice(0, 10).trim(); const p = s.split(/[-/.]/); return p.length === 3 ? p[0].padStart(4, "0") + "-" + p[1].padStart(2, "0") + "-" + p[2].padStart(2, "0") : s; };
   const sheetPayInfo = (sheetDate) => {
-    const txs = db.transfers.filter((x) => x.riderId === riderId && String(x.date || "").slice(0, 10) === String(sheetDate || "").slice(0, 10));
+    const sd = normDay(sheetDate);
+    const txs = (db.transfers || []).filter((x) => x.riderId === riderId && normDay(x.date) === sd);
     if (txs.length === 0) return { st: "none" };
     if (txs.some((x) => x.status === "Approved")) return { st: "approved" };
     if (txs.some((x) => x.status !== "Rejected")) return { st: "pending" };
@@ -3045,7 +3080,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
           </div></div>
         </Card>
       )}
-      {(() => { const mon = riderMonthly(db, riderId); if (mon.length === 0) return null;
+      {(() => { if (!showBalance) return null; const mon = riderMonthly(db, riderId); if (mon.length === 0) return null;
         const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
         const mv = (r) => r.cod - r.ded - r.paid; // حركة الشهر
         const owedOld = r3(mon.filter((r) => r.month < NEW_SYSTEM_START).reduce((s, r) => s + mv(r), 0)); // مبالغ سابقة (تُسدّد عبر المالية)
@@ -4720,16 +4755,16 @@ export default function App() {
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
         const st = (data && data.data) || {};
         const cw = st.codWindow || { enabled: false };
-        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly } : cur));
+        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly, balanceMode: st.balanceMode, balanceIds: st.balanceIds } : cur));
       }).catch(() => { setRider((cur) => (cur ? { ...cur, codWindow: { enabled: false } } : cur)); });
     }
     const id = setInterval(() => {
       supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => {
-        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly } : cur));
+        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly, balanceMode: cur.balanceMode, balanceIds: cur.balanceIds } : cur));
       });
       // حدّث إعداد النافذة والخصومات دورياً أيضاً
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
-        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly } : cur));
+        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly, balanceMode: data.data.balanceMode, balanceIds: data.data.balanceIds } : cur));
       });
     }, 30000);
     return () => clearInterval(id);
@@ -4789,11 +4824,11 @@ export default function App() {
   }
 
   if (rider) {
-    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments, payNowOnly: rider.payNowOnly }); });
+    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments, payNowOnly: rider.payNowOnly, balanceMode: rider.balanceMode, balanceIds: rider.balanceIds }); });
     const logoutRider = () => { try { localStorage.removeItem("mrd_rider"); } catch (e) {} setRider(null); };
     const rd = rider.view.riders[0];
     if (!rd) { logoutRider(); return null; }
-    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [], payNowOnly: (rider.payNowOnly !== undefined ? rider.payNowOnly : rider.view.payNowOnly) };
+    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [], payNowOnly: (rider.payNowOnly !== undefined ? rider.payNowOnly : rider.view.payNowOnly), balanceMode: (rider.balanceMode !== undefined ? rider.balanceMode : rider.view.balanceMode), balanceIds: (rider.balanceIds !== undefined ? rider.balanceIds : rider.view.balanceIds) };
     return (
       <div dir={dirOf()} className="min-h-screen bg-slate-100" data-lang={lang}>
         <Topbar user={{ name: rd.name, role: "Rider" }} onLogout={logoutRider} onMenu={null} title={t("بوابة المندوب", "Rider Portal")} logo onToggleLang={toggleLang} />
@@ -4903,6 +4938,26 @@ export default function App() {
                 <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Upload size={16} /> {t("طريقة رفع المندوب للإيصالات", "Rider Receipt Upload Mode")}</h4>
                 <label className="flex items-center gap-2 text-sm cursor-pointer mt-2"><input type="checkbox" checked={db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY} onChange={(e) => save({ ...db, payNowOnly: e.target.checked })} /> {t("إلزام الدفع عبر زر «ادفع الآن» فقط (منع الرفع الحر)", "Require payment via Pay Now only (block free upload)")}</label>
                 <p className="text-[11px] text-slate-400 mt-2">{(db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY) ? <span style={{ color: "#c0341d" }}>{t("مقفل: المندوب يرفع فقط عبر «ادفع الآن»", "Locked: riders upload only via Pay Now")}</span> : <span style={{ color: "#0f9d58" }}>{t("مفتوح: المندوب يرفع الإيصال بحرية", "Open: riders upload freely")}</span>}</p>
+              </div>
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><FileBarChart size={16} /> {t("إظهار رصيد COD الشهري للمناديب", "Show Monthly COD Balance to Riders")}</h4>
+                <p className="text-[11px] text-slate-400 mb-2">{t("بطاقة «رصيد COD الشهري» أعلى صفحة المندوب مخفية افتراضياً. اختر من يراها.", "The monthly COD balance card at the top of the rider page is hidden by default. Choose who sees it.")}</p>
+                <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={db.balanceMode || "off"} onChange={(e) => save({ ...db, balanceMode: e.target.value })}>
+                  <option value="off">{t("مخفي عن الكل", "Hidden from all")}</option>
+                  <option value="all">{t("ظاهر لكل المناديب", "Shown to all riders")}</option>
+                  <option value="selected">{t("مخصص (مناديب محددون)", "Custom (selected riders)")}</option>
+                </select>
+                {db.balanceMode === "selected" && (
+                  <div className="mt-3 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                    {db.riders.filter((r) => r.status === "Active").map((r) => { const ids = Array.isArray(db.balanceIds) ? db.balanceIds : []; const on = ids.includes(r.id); return (
+                      <label key={r.id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5">
+                        <input type="checkbox" checked={on} onChange={(e) => { const next = e.target.checked ? [...ids, r.id] : ids.filter((x) => x !== r.id); save({ ...db, balanceIds: next }); }} />
+                        <span>{r.name}</span><span className="text-slate-400 text-xs" dir="ltr">{r.companyId || r.phone || ""}</span>
+                      </label>
+                    ); })}
+                    {db.riders.filter((r) => r.status === "Active").length === 0 && <p className="text-xs text-slate-400">{t("لا يوجد مناديب", "No riders")}</p>}
+                  </div>
+                )}
               </div>
             </div>
           )}
