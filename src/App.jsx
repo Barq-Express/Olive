@@ -1309,15 +1309,18 @@ function OrdersTab({ company, db, save, user }) {
   const [hRider, setHRider] = useState("all");
   const [hRiderQ, setHRiderQ] = useState("");
   const [hType, setHType] = useState("all");
+  const [hArea, setHArea] = useState("all");
   const [hFrom, setHFrom] = useState("");
   const [hTo, setHTo] = useState("");
   const companyRiders = db.riders.filter((r) => r.company === company);
   const riderTypeOf = (id) => { const r = db.riders.find((x) => x.id === id); return (r && r.type) || ""; };
   const typeMatch = (id) => hType === "all" || riderTypeOf(id) === hType;
+  const areaMatch = (id) => { if (hArea === "all") return true; const r = db.riders.find((x) => x.id === id); return !!r && (r.area || "") === hArea; };
+  const ordAreas = Array.from(new Set(companyRiders.map((r) => r.area).filter(Boolean))).sort();
   const hRiderList = companyRiders.filter((r) => { const q = hRiderQ.trim().toLowerCase(); return !q || (r.name || "").toLowerCase().includes(q) || (r.phone || "").includes(q) || (r.companyId || "").toLowerCase().includes(q); });
   const inRange = (dt) => (!hFrom || dt >= hFrom) && (!hTo || dt <= hTo);
   const histRows = ims.filter((im) => inRange(im.date || "")).map((im) => {
-    const res = (im.results || []).filter((r) => (hRider === "all" || r.riderId === hRider) && typeMatch(r.riderId));
+    const res = (im.results || []).filter((r) => (hRider === "all" || r.riderId === hRider) && typeMatch(r.riderId) && areaMatch(r.riderId));
     return { date: im.date, orders: res.reduce((a, r) => a + (r.orders || 0), 0), cod: res.reduce((a, r) => a + (r.cod || 0), 0), due: res.reduce((a, r) => a + (r.transferDue || 0), 0), hours: res.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0) };
   }).filter((x) => x.orders > 0 || x.cod > 0 || (hRider === "all" && hType === "all")).sort((a, b) => (a.date < b.date ? 1 : -1));
   const hTotals = histRows.reduce((a, x) => ({ orders: a.orders + x.orders, cod: a.cod + x.cod, due: a.due + x.due, hours: a.hours + x.hours }), { orders: 0, cod: 0, due: 0, hours: 0 });
@@ -1355,7 +1358,8 @@ function OrdersTab({ company, db, save, user }) {
           <Field label={t("من تاريخ", "From")}><input type="date" className={inputCls} value={hFrom} onChange={(e) => setHFrom(e.target.value)} /></Field>
           <Field label={t("إلى تاريخ", "To")}><input type="date" className={inputCls} value={hTo} onChange={(e) => setHTo(e.target.value)} /></Field>
           <Field label={t("نوع المندوب", "Rider type")}><select className={inputCls} value={hType} onChange={(e) => setHType(e.target.value)}><option value="all">{t("الكل", "All")}</option><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="Under Training">{t("تحت التدريب", "Under Training")}</option></select></Field>
-          <div className="flex items-end">{(hFrom || hTo || hRider !== "all" || hRiderQ || hType !== "all") && <Btn kind="ghost" onClick={() => { setHRider("all"); setHFrom(""); setHTo(""); setHRiderQ(""); setHType("all"); }}>{t("مسح", "Clear")}</Btn>}</div>
+          <Field label={t("المنطقة", "Area")}><select className={inputCls} value={hArea} onChange={(e) => setHArea(e.target.value)}><option value="all">{t("كل المناطق", "All areas")}</option>{ordAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select></Field>
+          <div className="flex items-end">{(hFrom || hTo || hRider !== "all" || hRiderQ || hType !== "all" || hArea !== "all") && <Btn kind="ghost" onClick={() => { setHRider("all"); setHFrom(""); setHTo(""); setHRiderQ(""); setHType("all"); setHArea("all"); }}>{t("مسح", "Clear")}</Btn>}</div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -2281,9 +2285,10 @@ function AttendanceTab({ company, db, save }) {
 }
 function ReportsScoped({ db, company }) {
   const [type, setType] = useState("cod");
-  const [pFrom, setPFrom] = useState(""); const [pTo, setPTo] = useState(""); const [pType, setPType] = useState("Freelancer");
+  const [pFrom, setPFrom] = useState(""); const [pTo, setPTo] = useState(""); const [pType, setPType] = useState("Freelancer"); const [pArea, setPArea] = useState("all");
   const types = { period: t("مندوبي فترة (حسب التاريخ)", "Riders in Period"), cod: tr("تقرير COD"), notworked: tr("لم يعملوا / غير نشطين"), freelancer: tr("مستحقات الفريلانسر"), fulltime: tr("رواتب Full Time"), riders: tr("كل المناديب") };
-  const rs = db.riders.filter((r) => !company || r.company === company);
+  const rs = db.riders.filter((r) => (!company || r.company === company) && (pArea === "all" || (r.area || "") === pArea));
+  const repAreas = Array.from(new Set(db.riders.filter((r) => !company || r.company === company).map((r) => r.area).filter(Boolean))).sort();
   // حساب طلبات/COD/حقوق مندوب ضمن فترة (حسب تاريخ الشيت)
   const periodStats = (rid) => {
     const inR = (d) => { const s = String(d || "").slice(0, 10); return (!pFrom || s >= pFrom) && (!pTo || s <= pTo); };
@@ -2301,12 +2306,13 @@ function ReportsScoped({ db, company }) {
     if (type === "freelancer") return rs.filter((r) => r.type === "Freelancer").map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), الطلبات: m.orders, المستحق: m.earn }; });
     if (type === "fulltime") return rs.filter((r) => r.type === "Full Time").map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), الطلبات: m.orders, ساعات_الدوام: m.hours, قيمة_الساعات: m.hoursPay, الراتب: m.earn }; });
     return rs.map((r) => ({ المندوب: r.name, الهاتف: r.phone, المدني: r.civil || "", الشركة: cLabel(r.company), النوع: r.type, الحالة: r.status }));
-  }, [type, db, company, pFrom, pTo, pType]);
+  }, [type, db, company, pFrom, pTo, pType, pArea]);
   const cols = rows[0] ? Object.keys(rows[0]) : [];
   return (
     <div className="space-y-4">
       <Card className="p-5"><div className="flex items-center justify-between gap-3 flex-wrap">
         <Field label={tr("نوع التقرير")}><select className={inputCls + " w-72"} value={type} onChange={(e) => setType(e.target.value)}>{Object.entries(types).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+        <Field label={t("المنطقة", "Area")}><select className={inputCls} value={pArea} onChange={(e) => setPArea(e.target.value)}><option value="all">{t("كل المناطق", "All areas")}</option>{repAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select></Field>
         {type === "period" && <>
           <Field label={t("من تاريخ", "From")}><input type="date" className={inputCls} value={pFrom} onChange={(e) => setPFrom(e.target.value)} /></Field>
           <Field label={t("إلى تاريخ", "To")}><input type="date" className={inputCls} value={pTo} onChange={(e) => setPTo(e.target.value)} /></Field>
@@ -2336,6 +2342,7 @@ function ReportsScoped({ db, company }) {
 
 const CTABS = [
   { key: "overview", ar: tr("نظرة عامة"), en: "Overview", icon: LayoutDashboard },
+  { key: "operations", ar: t("لوحة العمليات", "Operations"), en: "Operations", icon: LayoutDashboard },
   { key: "dues", ar: t("مستحقات المناديب", "Rider Dues"), en: "Rider Dues", icon: Wallet },
   { key: "riders", ar: tr("المناديب"), en: "Riders", icon: Users },
   { key: "orders", ar: tr("الطلبات"), en: "Orders", icon: Truck },
@@ -2347,6 +2354,239 @@ const CTABS = [
   { key: "reports", ar: tr("التقارير"), en: "Reports", icon: FileBarChart },
 ];
 
+function OperationsTab({ company, db }) {
+  const rIdx = {}; db.riders.forEach((r) => { rIdx[r.id] = r; });
+  const companyAreas = Array.from(new Set(db.riders.filter((r) => r.company === company).map((r) => r.area).filter(Boolean))).sort();
+  const imps = db.imports.filter((im) => im.company === company);
+  const allDates = Array.from(new Set(imps.map((im) => im.date))).filter(Boolean).sort();
+  const latest = allDates.length ? allDates[allDates.length - 1] : todayStr();
+  const [date, setDate] = useState(latest);
+  const [area, setArea] = useState("all");
+  const [lbType, setLbType] = useState("Freelancer");
+  const [lbScope, setLbScope] = useState("day");
+  const [hrScope, setHrScope] = useState("day");
+  const FULL_DAY = 8;
+
+  const inArea = (rid) => { const r = rIdx[rid]; return area === "all" || (r && (r.area || "") === area); };
+  const resultsOn = (d) => { const im = imps.find((x) => x.date === d); return im ? (im.results || []).filter((r) => r.riderId && rIdx[r.riderId] && inArea(r.riderId)) : []; };
+  const sumBy = (arr, k) => arr.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const capH = (arr) => arr.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0);
+  const idx = allDates.indexOf(date);
+  const prevDate = idx > 0 ? allDates[idx - 1] : null;
+
+  const curRes = resultsOn(date);
+  const prevRes = prevDate ? resultsOn(prevDate) : [];
+  const curOrders = sumBy(curRes, "orders"), prevOrders = sumBy(prevRes, "orders");
+  const curCod = sumBy(curRes, "cod"), prevCod = sumBy(prevRes, "cod");
+  const curHours = capH(curRes), prevHours = capH(prevRes);
+  const curActive = curRes.filter((r) => (Number(r.orders) || 0) > 0).length;
+  const prevActive = prevRes.filter((r) => (Number(r.orders) || 0) > 0).length;
+  const pct = (cur, prev) => { if (!prev) return cur > 0 ? 100 : 0; return Math.round(((cur - prev) / prev) * 1000) / 10; };
+
+  const trend = allDates.slice(-14).map((d) => ({ d, o: sumBy(resultsOn(d), "orders") }));
+  const trendMax = Math.max(1, ...trend.map((x) => x.o));
+
+  const lbRows = (() => {
+    if (lbScope === "day") return curRes.filter((r) => rIdx[r.riderId] && rIdx[r.riderId].type === lbType).map((r) => ({ rid: r.riderId, orders: Number(r.orders) || 0, hours: Math.min(Number(r.hours) || 0, HOURS_CAP), accept: r.accept, days: 1 }));
+    const agg = {};
+    allDates.forEach((d) => resultsOn(d).forEach((r) => { if (rIdx[r.riderId] && rIdx[r.riderId].type === lbType) { const g = agg[r.riderId] = agg[r.riderId] || { rid: r.riderId, orders: 0, hours: 0, days: 0 }; g.orders += Number(r.orders) || 0; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); g.days += 1; } }));
+    return Object.values(agg);
+  })();
+  const lbSorted = lbRows.slice().sort((a, b) => b.orders - a.orders).slice(0, 15);
+
+  const hrRows = (() => {
+    if (hrScope === "day") return curRes.map((r) => ({ rid: r.riderId, hours: Math.min(Number(r.hours) || 0, HOURS_CAP), orders: Number(r.orders) || 0 }));
+    const agg = {};
+    allDates.forEach((d) => resultsOn(d).forEach((r) => { const g = agg[r.riderId] = agg[r.riderId] || { rid: r.riderId, hours: 0, orders: 0 }; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); g.orders += Number(r.orders) || 0; }));
+    return Object.values(agg);
+  })();
+  const hrSorted = hrRows.slice().sort((a, b) => b.hours - a.hours);
+
+  const activeRidersCompany = db.riders.filter((r) => r.company === company && r.status === "Active" && (area === "all" || (r.area || "") === area));
+  const workedIds = new Set(curRes.map((r) => r.riderId));
+  const notWorked = activeRidersCompany.filter((r) => !workedIds.has(r.id));
+  const belowFull = curRes.filter((r) => Math.min(Number(r.hours) || 0, HOURS_CAP) < FULL_DAY);
+  const lowAccept = curRes.filter((r) => rIdx[r.riderId] && rIdx[r.riderId].type === "Full Time" && r.accept != null && Number(r.accept) > 0 && Number(r.accept) < ACCEPT_MIN);
+
+  const rName = (rid) => (rIdx[rid] && rIdx[rid].name) || "—";
+  const rArea = (rid) => (rIdx[rid] && rIdx[rid].area) || "—";
+  const rCid = (rid) => (rIdx[rid] && rIdx[rid].companyId) || "";
+  const delta = (cur, prev) => { const p = pct(cur, prev); const up = cur >= prev; return <span className="text-xs font-bold" style={{ color: up ? "#0f9d58" : "#c0341d" }}>{up ? "▲" : "▼"} {Math.abs(p)}% <span className="text-slate-400 font-normal">{t("عن الأمس", "vs prev")}</span></span>; };
+  const medal = (i) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+
+  const sumIdx = (a, b) => allDates.slice(Math.max(0, a), Math.max(0, b)).reduce((s, d) => s + sumBy(resultsOn(d), "orders"), 0);
+  const wkCur = sumIdx(idx - 6, idx + 1), wkPrev = sumIdx(idx - 13, idx - 6);
+  const moCur = sumIdx(idx - 29, idx + 1), moPrev = sumIdx(idx - 59, idx - 29);
+  const byArea = {}; curRes.forEach((r) => { const ar = (rIdx[r.riderId] && rIdx[r.riderId].area) || "—"; const g = byArea[ar] = byArea[ar] || { area: ar, orders: 0, riders: 0, hours: 0 }; g.orders += Number(r.orders) || 0; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); if ((Number(r.orders) || 0) > 0) g.riders += 1; });
+  const areaRows = Object.values(byArea).sort((a, b) => b.orders - a.orders);
+  const absent = db.riders.filter((r) => r.company === company && r.status === "Active" && (area === "all" || (r.area || "") === area) && r.lastWorked && daysSince(r.lastWorked) >= 7).map((r) => ({ r, days: daysSince(r.lastWorked) })).sort((a, b) => b.days - a.days);
+  const exportOps = () => exportExcel(lbSorted.map((x, i) => ({ "الترتيب": i + 1, "المندوب": rName(x.rid), ID: rCid(x.rid), "المنطقة": rArea(x.rid), "الطلبات": x.orders, "الساعات": Math.round(x.hours * 10) / 10 })), "Operations_" + company + "_" + date);
+  const kpi = (label, value, cur, prev, color) => (
+    <div className="rounded-xl p-4 border border-slate-100" style={{ background: "#fff" }}>
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-2xl font-extrabold" style={{ color }}>{value}</div>
+      <div className="mt-1">{prevDate ? delta(cur, prev) : <span className="text-[11px] text-slate-400">{t("لا يوجد يوم سابق", "no prior day")}</span>}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2 pb-1">
+        <span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.navy }}><LayoutDashboard size={18} color="#fff" /></span>
+        <h2 className="font-extrabold text-lg text-slate-800">{t("لوحة العمليات", "Operations")} — {cLabel(company)}</h2>
+      </div>
+
+      <div className="flex gap-2 flex-wrap items-center">
+        <select value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          {allDates.slice().reverse().map((d) => <option key={d} value={d}>{d}{d === latest ? t(" (الأحدث)", " (latest)") : ""}</option>)}
+          {allDates.length === 0 && <option value={latest}>{latest}</option>}
+        </select>
+        <select value={area} onChange={(e) => setArea(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">{t("كل المناطق", "All areas")}</option>{companyAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+        <Btn kind="ghost" size="sm" onClick={exportOps}><Download size={14} /> Excel</Btn>
+        <span className="text-xs text-slate-400">{prevDate ? t("المقارنة مع: ", "compared to: ") + prevDate : ""}</span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {kpi(t("الطلبات", "Orders"), curOrders, curOrders, prevOrders, BRAND.blue)}
+        {kpi(t("المناديب العاملون", "Active riders"), curActive, curActive, prevActive, "#0f9d58")}
+        {kpi(t("إجمالي COD", "Total COD"), omr(curCod), curCod, prevCod, BRAND.orange)}
+        {kpi(t("إجمالي الساعات", "Total hours"), Math.round(curHours * 10) / 10, curHours, prevHours, BRAND.navy)}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl p-4 border border-slate-100 bg-white"><div className="text-xs text-slate-500">{t("آخر 7 أيام عمل مقابل السابقة", "Last 7 work-days vs prior")}</div><div className="text-xl font-extrabold flex items-center gap-2" style={{ color: BRAND.blue }}>{wkCur} {idx > 6 ? delta(wkCur, wkPrev) : null}</div></div>
+        <div className="rounded-xl p-4 border border-slate-100 bg-white"><div className="text-xs text-slate-500">{t("آخر 30 يوم عمل مقابل السابقة", "Last 30 work-days vs prior")}</div><div className="text-xl font-extrabold flex items-center gap-2" style={{ color: BRAND.navy }}>{moCur} {idx > 29 ? delta(moCur, moPrev) : null}</div></div>
+      </div>
+      <Card className="p-5">
+        <h3 className="font-bold text-slate-800 mb-3">{t("اتجاه الطلبات — آخر 14 يوم", "Orders trend — last 14 days")}</h3>
+        <div className="flex items-end gap-1.5 h-40" dir="ltr">
+          {trend.map((x) => (
+            <div key={x.d} className="flex-1 flex flex-col items-center justify-end group" title={x.d + ": " + x.o}>
+              <span className="text-[10px] text-slate-500 mb-1">{x.o}</span>
+              <div className="w-full rounded-t" style={{ height: Math.max(3, (x.o / trendMax) * 120) + "px", background: x.d === date ? BRAND.orange : BRAND.blue + "99" }}></div>
+              <span className="text-[9px] text-slate-400 mt-1">{x.d.slice(5)}</span>
+            </div>
+          ))}
+          {trend.length === 0 && <div className="text-sm text-slate-400 w-full text-center">{t("لا توجد بيانات", "No data")}</div>}
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-bold text-slate-800">{t("المتصدّرون في الطلبات", "Top performers (orders)")}</h3>
+          <div className="flex gap-1">
+            {[["Freelancer", t("فريلانسر", "Freelancer")], ["Full Time", t("فول تايم", "Full Time")]].map(([k, l]) => (
+              <button key={k} onClick={() => setLbType(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={lbType === k ? { background: BRAND.orange, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
+            ))}
+            <span className="w-2"></span>
+            {[["day", t("اليوم", "Day")], ["overall", t("الإجمالي", "Overall")]].map(([k, l]) => (
+              <button key={k} onClick={() => setLbScope(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={lbScope === k ? { background: BRAND.navy, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("الطلبات", "Orders"), t("الساعات", "Hours"), ...(lbScope === "overall" ? [t("أيام العمل", "Days")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <tbody>
+            {lbSorted.map((x, i) => (
+              <tr key={x.rid} className="border-b border-slate-50" style={i < 3 ? { background: "#fffdf5" } : undefined}>
+                <td className="py-2 px-3 font-bold">{medal(i)}</td>
+                <td className="px-3 font-semibold text-slate-800">{rName(x.rid)}</td>
+                <td className="px-3 text-slate-500" dir="ltr">{rCid(x.rid)}</td>
+                <td className="px-3 text-slate-600">{rArea(x.rid)}</td>
+                <td className="px-3 font-bold" style={{ color: BRAND.blue }}>{x.orders}</td>
+                <td className="px-3 text-slate-600">{Math.round(x.hours * 10) / 10}</td>
+                {lbScope === "overall" ? <td className="px-3 text-slate-500">{x.days}</td> : null}
+              </tr>
+            ))}
+            {lbSorted.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("لا توجد بيانات لهذا اليوم/النوع", "No data for this day/type")}</td></tr>}
+          </tbody>
+        </table></div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-bold text-slate-800">{t("ترتيب ساعات العمل", "Work hours ranking")} <span className="text-xs font-normal text-slate-400">({t("دوام كامل = 8 ساعات فأكثر", "full day = 8h+")})</span></h3>
+          <div className="flex gap-1">
+            {[["day", t("اليوم", "Day")], ["overall", t("الإجمالي", "Overall")]].map(([k, l]) => (
+              <button key={k} onClick={() => setHrScope(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={hrScope === k ? { background: BRAND.navy, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), tr("المنطقة"), t("النوع", "Type"), t("الساعات", "Hours"), t("الطلبات", "Orders"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <tbody>
+            {hrSorted.map((x, i) => { const full = hrScope === "day" ? x.hours >= FULL_DAY : true; const rr = rIdx[x.rid]; return (
+              <tr key={x.rid} className="border-b border-slate-50">
+                <td className="py-2 px-3 text-slate-400">{i + 1}</td>
+                <td className="px-3 font-semibold text-slate-800">{rName(x.rid)}</td>
+                <td className="px-3 text-slate-600">{rArea(x.rid)}</td>
+                <td className="px-3 text-slate-500">{rr && rr.type === "Full Time" ? t("فول تايم", "Full Time") : t("فريلانسر", "Freelancer")}</td>
+                <td className="px-3 font-bold" style={{ color: (hrScope === "day" && x.hours < FULL_DAY) ? "#c0341d" : "#0f9d58" }}>{Math.round(x.hours * 10) / 10}</td>
+                <td className="px-3 text-slate-600">{x.orders}</td>
+                <td className="px-3">{hrScope === "day" ? (x.hours >= FULL_DAY ? <span style={{ color: "#0f9d58", fontWeight: 700 }}>{t("دوام كامل ✓", "Full ✓")}</span> : <span style={{ color: "#c0341d", fontWeight: 700 }}>{t("ناقص", "Short")}</span>) : <span className="text-slate-400">—</span>}</td>
+              </tr>
+            ); })}
+            {hrSorted.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("لا توجد بيانات", "No data")}</td></tr>}
+          </tbody>
+        </table></div>
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="font-bold text-slate-800 mb-3">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المنطقة", "Area"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("الساعات", "Hours"), t("طلب/ساعة", "Orders/hr")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <tbody>
+            {areaRows.map((g) => (
+              <tr key={g.area} className="border-b border-slate-50">
+                <td className="py-2 px-3 font-semibold text-slate-800">{g.area}</td>
+                <td className="px-3 font-bold" style={{ color: BRAND.blue }}>{g.orders}</td>
+                <td className="px-3 text-slate-600">{g.riders}</td>
+                <td className="px-3 text-slate-600">{Math.round(g.hours * 10) / 10}</td>
+                <td className="px-3 font-semibold" style={{ color: "#0f9d58" }}>{g.hours > 0 ? Math.round((g.orders / g.hours) * 10) / 10 : "—"}</td>
+              </tr>
+            ))}
+            {areaRows.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-400">{t("لا توجد بيانات", "No data")}</td></tr>}
+          </tbody>
+        </table></div>
+      </Card>
+
+      <Card className="p-5" style={{ borderRight: "4px solid #c0341d" }}>
+        <h3 className="font-bold text-slate-800 mb-1">🚨 {t("غياب 7 أيام فأكثر (متتالية)", "Absent 7+ days (consecutive)")} <span className="text-slate-400 text-sm">({absent.length})</span></h3>
+        <p className="text-xs text-slate-500 mb-3">{t("مناديب نشطون لم يعملوا منذ 7 أيام أو أكثر — يحتاجون متابعة.", "Active riders with no work for 7+ days — need follow-up.")}</p>
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-right text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), "ID", tr("المنطقة"), t("آخر يوم عمل", "Last worked"), t("أيام الغياب", "Days absent")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <tbody>
+            {absent.map((x) => (
+              <tr key={x.r.id} className="border-b border-slate-50">
+                <td className="py-2 px-3 font-semibold text-slate-800">{x.r.name}</td>
+                <td className="px-3 text-slate-500" dir="ltr">{x.r.companyId || ""}</td>
+                <td className="px-3 text-slate-600">{x.r.area || "—"}</td>
+                <td className="px-3 text-slate-500" dir="ltr">{x.r.lastWorked}</td>
+                <td className="px-3 font-bold" style={{ color: "#c0341d" }}>{x.days}</td>
+              </tr>
+            ))}
+            {absent.length === 0 && <tr><td colSpan={5} className="py-6 text-center" style={{ color: "#0f9d58" }}>{t("لا يوجد غياب طويل 👍", "No long absences 👍")}</td></tr>}
+          </tbody>
+        </table></div>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card className="p-4" style={{ borderRight: "4px solid #c0341d" }}>
+          <h4 className="font-bold text-slate-800 text-sm mb-1">⛔ {t("لم يعملوا اليوم", "Didn't work today")} <span className="text-slate-400">({notWorked.length})</span></h4>
+          <div className="text-xs text-slate-600 max-h-40 overflow-auto">{notWorked.slice(0, 40).map((r) => <div key={r.id} className="py-0.5 border-b border-slate-50">{r.name} <span className="text-slate-400">· {r.area || "—"}</span></div>)}{notWorked.length === 0 && <span className="text-slate-400">{t("الكل عملوا 👍", "All worked 👍")}</span>}</div>
+        </Card>
+        <Card className="p-4" style={{ borderRight: "4px solid #d97706" }}>
+          <h4 className="font-bold text-slate-800 text-sm mb-1">⏳ {t("أقل من دوام كامل", "Below full day")} <span className="text-slate-400">({belowFull.length})</span></h4>
+          <div className="text-xs text-slate-600 max-h-40 overflow-auto">{belowFull.slice(0, 40).map((r) => <div key={r.riderId} className="py-0.5 border-b border-slate-50">{rName(r.riderId)} <span className="text-slate-400">· {Math.min(Number(r.hours) || 0, HOURS_CAP)}h</span></div>)}{belowFull.length === 0 && <span className="text-slate-400">{t("لا أحد 👍", "None 👍")}</span>}</div>
+        </Card>
+        <Card className="p-4" style={{ borderRight: "4px solid #7c3aed" }}>
+          <h4 className="font-bold text-slate-800 text-sm mb-1">📉 {t("قبول منخفض (فول تايم)", "Low acceptance (FT)")} <span className="text-slate-400">({lowAccept.length})</span></h4>
+          <div className="text-xs text-slate-600 max-h-40 overflow-auto">{lowAccept.slice(0, 40).map((r) => <div key={r.riderId} className="py-0.5 border-b border-slate-50">{rName(r.riderId)} <span className="text-slate-400">· {r.accept}%</span></div>)}{lowAccept.length === 0 && <span className="text-slate-400">{t("لا أحد 👍", "None 👍")}</span>}</div>
+        </Card>
+      </div>
+    </div>
+  );
+}
 function MonthlyTab({ company, db }) {
   const [month, setMonth] = useState(curMonthStr());
   const [riderId, setRiderId] = useState("");
@@ -2581,7 +2821,7 @@ function CompanyWindow({ company, db, save, user, onRefresh }) {
         <h2 className="font-extrabold text-lg" style={{ color: CMETA[company].color }}>{t("نافذة", "Window")} {cLabel(company)}</h2>
       </div>
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 pb-px">
-        {CTABS.map((tb) => {
+        {CTABS.filter((tb) => tb.key !== "operations" || (user && (user.role === "Admin" || user.role === "Operations Manager"))).map((tb) => {
           const Icon = tb.icon; const active = tab === tb.key;
           return (
             <button key={tb.key} onClick={() => setTab(tb.key)}
@@ -2594,6 +2834,7 @@ function CompanyWindow({ company, db, save, user, onRefresh }) {
       </div>
       <div>
         {tab === "overview" && <OverviewTab company={company} db={db} />}
+        {tab === "operations" && (user && (user.role === "Admin" || user.role === "Operations Manager")) && <OperationsTab company={company} db={db} />}
         {tab === "riders" && <Riders db={db} save={save} company={company} user={user} />}
         {tab === "orders" && <OrdersTab company={company} db={db} save={save} user={user} />}
         {tab === "transfers" && <TransfersTab company={company} db={db} save={save} user={user} onRefresh={onRefresh} />}
