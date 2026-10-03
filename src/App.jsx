@@ -2493,7 +2493,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("الطلبات", "Orders"), t("الساعات", "Hours"), ...(lbScope === "overall" ? [t("أيام العمل", "Days")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {lbSorted.map((x, i) => (
@@ -2521,7 +2521,7 @@ function OperationsTab({ company, db }) {
             ))}
           </div>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), tr("المنطقة"), t("النوع", "Type"), t("الساعات", "Hours"), t("الطلبات", "Orders"), t("الحالة", "Status")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {hrSorted.map((x, i) => { const full = hrScope === "day" ? x.hours >= FULL_DAY : true; const rr = rIdx[x.rid]; return (
@@ -2542,7 +2542,7 @@ function OperationsTab({ company, db }) {
 
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
-        <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
+        <div className="overflow-x-auto"><table className="text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المنطقة", "Area"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("الساعات", "Hours"), t("طلب/ساعة", "Orders/hr")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {areaRows.map((g) => (
