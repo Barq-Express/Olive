@@ -1106,7 +1106,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
 }
 
 function Riders({ db, save, company, user }) {
-  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all");
+  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all");
   const [editing, setEditing] = useState(null); const [bulk, setBulk] = useState(false);
   const scoped = db.riders.filter((r) => (!company || r.company === company));
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
@@ -1117,6 +1117,7 @@ function Riders({ db, save, company, user }) {
     (af === "all" || (r.area || "") === af) &&
     (natf === "all" || natClass(r.nationality) === natf) &&
     (vehf === "all" || (r.vehicleType || "") === vehf) &&
+    (typef === "all" || r.type === typef) &&
     (r.name.includes(q) || r.phone.includes(q) || (r.companyId || "").includes(q) || (r.civil || "").includes(q) || (r.area || "").includes(q)));
   const isAdmin = user && (user.role === "Admin" || user.role === "Operations Manager");
   const [resetOpen, setResetOpen] = useState(false);
@@ -1184,10 +1185,11 @@ function Riders({ db, save, company, user }) {
         <div className="flex gap-2 flex-wrap items-center">
           <div className="relative"><Search size={16} className="absolute right-3 top-2.5 text-slate-400" />
             <input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-56" placeholder={t("بحث: اسم / رقم / ID / منطقة", "Search: name / phone / ID / area")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          {!company && <select className={inputCls + " w-32"} value={cf} onChange={(e) => setCf(e.target.value)}><option value="all">{tr("كل الشركات")}</option>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>}
-          <select className={inputCls + " w-32"} value={af} onChange={(e) => setAf(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
-          <select className={inputCls + " w-32"} value={natf} onChange={(e) => setNatf(e.target.value)}><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عمانيين", "Omani")}</option><option value="foreign">{t("أجانب", "Foreign")}</option><option value="unknown">{t("غير محدد", "Unspecified")}</option></select>
-          <select className={inputCls + " w-32"} value={vehf} onChange={(e) => setVehf(e.target.value)}><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سيارة", "Car")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
+          {!company && <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={cf} onChange={(e) => setCf(e.target.value)}><option value="all">{tr("كل الشركات")}</option>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>}
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={af} onChange={(e) => setAf(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={natf} onChange={(e) => setNatf(e.target.value)}><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عمانيين", "Omani")}</option><option value="foreign">{t("أجانب", "Foreign")}</option><option value="unknown">{t("غير محدد", "Unspecified")}</option></select>
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={vehf} onChange={(e) => setVehf(e.target.value)}><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سيارة", "Car")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={typef} onChange={(e) => setTypef(e.target.value)}><option value="all">{t("كل الأنواع", "All types")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option></select>
         </div>
         <div className="flex gap-2">
           <Btn kind="ghost" onClick={() => exportExcel(list.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الهاتف: r.phone, ID: r.companyId || "", الشركة: cLabel(r.company), النوع: r.type, المنطقة: r.area || "", الكوميشن: r.commission || "", البنك: r.bankName || "", رقم_الحساب: r.bank || "", سويفت: r.swift || "", الطلبات: m.orders, "COD_المتبقي": m.owed, المستحق: m.earn, الحالة: r.status }; }), "Riders_" + (company || "All"))}><Download size={16} /> {t("تصدير Excel", "Export Excel")} ({list.length})</Btn>
