@@ -401,6 +401,24 @@ function computeEarn(company, type, orders) {
   return 0; // Talabat: settled by platform, not tracked here
 }
 
+/* قواعد راتب الفول تايم (قابلة للضبط من الإعدادات): شهري ثابت أو بالساعة، لكل المناطق أو مناطق محددة */
+function ftRuleFor(db, area) {
+  const rules = (db && db.ftPayRules) || [];
+  const a = String(area || "").trim();
+  const specific = rules.find((r) => Array.isArray(r.areas) && r.areas.length && r.areas.map((x) => String(x).trim()).includes(a));
+  if (specific) return specific;
+  return rules.find((r) => !r.areas || r.areas.length === 0) || null;
+}
+function ftEarn(db, rider, hoursCapped) {
+  const rule = ftRuleFor(db, rider ? rider.area : "");
+  if (rule) {
+    const amt = Number(rule.amount) || 0;
+    if (rule.mode === "hourly") return hoursCapped * amt;               // سعر بالساعة
+    return hoursCapped >= FULL_MONTH_HOURS ? amt : hoursCapped * (amt / FULL_MONTH_HOURS); // شهري ثابت (مُحتسب نسبياً دون الشهر الكامل)
+  }
+  return hoursCapped >= FULL_MONTH_HOURS ? FULL_MONTH_SALARY : hoursCapped * HOUR_RATE;     // الافتراضي
+}
+
 /* 6-way bank reconciliation classification */
 function classifyTransfer(t, bank) {
   if (!bank || bank.length === 0)
@@ -458,6 +476,7 @@ function normalizeDB(db) {
     payNowOnly: db.payNowOnly,
     balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
     balanceIds: db.balanceIds || [],
+    ftPayRules: db.ftPayRules || [],         // قواعد راتب الفول تايم (شهري/بالساعة لكل منطقة)
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
   };
 }
@@ -634,7 +653,7 @@ function _computeRiderMoney(db, riderId) {
       const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0);
       earn = orders * rate;
     } else {
-      earn = hoursCapped >= FULL_MONTH_HOURS ? FULL_MONTH_SALARY : hoursCapped * HOUR_RATE; // سقف الراتب الشهري
+      earn = ftEarn(db, rider, hoursCapped); // راتب الفول تايم حسب القواعد المضبوطة
     }
   }
   const hoursPay = rider && rider.type === "Full Time" ? earn : hoursCapped * HOUR_RATE;
@@ -2640,7 +2659,7 @@ function MonthlyTab({ company, db }) {
     const avgAccept = accDays.length ? Math.round(accDays.reduce((s, x) => s + x.accept, 0) / accDays.length) : 0;
     const rider = db.riders.find((r) => r.id === rid);
     let earn = 0;
-    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); earn = orders * rate; } else { earn = hoursCapped >= FULL_MONTH_HOURS ? FULL_MONTH_SALARY : hoursCapped * HOUR_RATE; } }
+    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); earn = orders * rate; } else { earn = ftEarn(db, rider, hoursCapped); } }
     return { orders, cod, hoursRaw, hoursCapped, avgAccept, earn, days: rows.length };
   };
 
@@ -4958,6 +4977,48 @@ export default function App() {
                     {db.riders.filter((r) => r.status === "Active").length === 0 && <p className="text-xs text-slate-400">{t("لا يوجد مناديب", "No riders")}</p>}
                   </div>
                 )}
+              </div>
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Wallet size={16} /> {t("رواتب الفول تايم", "Full-Time Salaries")}</h4>
+                <p className="text-[11px] text-slate-400 mb-2">{t("حدّد راتباً شهرياً ثابتاً أو سعراً بالساعة للفول تايم — لكل المناطق أو مناطق محددة. بدون قواعد يُستخدم الافتراضي.", "Set a fixed monthly salary or an hourly rate for Full-Time riders — for all areas or selected ones. With no rules, the default applies.")}</p>
+                {(() => {
+                  const areas = Array.from(new Set([...(db.areas || []), ...db.riders.map((r) => r.area).filter(Boolean)])).sort();
+                  const rules = db.ftPayRules || [];
+                  const setRules = (next) => save({ ...db, ftPayRules: next });
+                  const upd = (id, patch) => setRules(rules.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+                  return (
+                    <div className="space-y-2">
+                      {rules.map((rule) => (
+                        <div key={rule.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                          <div className="flex gap-2 flex-wrap items-center">
+                            <select value={rule.mode || "monthly"} onChange={(e) => upd(rule.id, { mode: e.target.value })} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                              <option value="monthly">{t("راتب شهري ثابت", "Fixed monthly")}</option>
+                              <option value="hourly">{t("سعر بالساعة", "Hourly rate")}</option>
+                            </select>
+                            <input type="number" step="0.001" value={rule.amount ?? ""} onChange={(e) => upd(rule.id, { amount: e.target.value })} placeholder={rule.mode === "hourly" ? t("ريال/ساعة", "OMR/hour") : t("ريال/شهر", "OMR/month")} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm w-32" dir="ltr" />
+                            <span className="text-[11px] text-slate-400">{rule.mode === "hourly" ? t("ريال لكل ساعة", "OMR per hour") : t("ريال شهرياً (كامل عند " + FULL_MONTH_HOURS + " ساعة)", "OMR/month (full at " + FULL_MONTH_HOURS + "h)")}</span>
+                            <button onClick={() => setRules(rules.filter((r) => r.id !== rule.id))} className="text-xs font-semibold text-red-500 ms-auto">{t("حذف", "Remove")}</button>
+                          </div>
+                          <div className="flex gap-3 items-center flex-wrap text-sm">
+                            <label className="flex items-center gap-1 cursor-pointer"><input type="radio" checked={!rule.areas || rule.areas.length === 0} onChange={() => upd(rule.id, { areas: [] })} /> {t("كل المناطق", "All areas")}</label>
+                            <label className="flex items-center gap-1 cursor-pointer"><input type="radio" checked={!!(rule.areas && rule.areas.length)} onChange={() => upd(rule.id, { areas: areas.slice(0, 1) })} /> {t("مناطق محددة", "Selected areas")}</label>
+                          </div>
+                          {rule.areas && rule.areas.length > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {areas.map((a) => { const on = rule.areas.includes(a); return (
+                                <label key={a} className="flex items-center gap-1 text-xs cursor-pointer border border-slate-200 rounded-lg px-2 py-1" style={on ? { background: BRAND.navy, color: "#fff", borderColor: BRAND.navy } : undefined}>
+                                  <input type="checkbox" className="hidden" checked={on} onChange={(e) => upd(rule.id, { areas: e.target.checked ? [...rule.areas, a] : rule.areas.filter((x) => x !== a) })} />{a}
+                                </label>
+                              ); })}
+                              {areas.length === 0 && <span className="text-xs text-slate-400">{t("لا توجد مناطق مسجّلة", "No areas registered")}</span>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <Btn kind="ghost" size="sm" onClick={() => setRules([...rules, { id: uid(), mode: "monthly", amount: "", areas: [] }])}><Plus size={14} /> {t("إضافة قاعدة راتب", "Add salary rule")}</Btn>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
