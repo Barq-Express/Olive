@@ -387,6 +387,8 @@ const omr = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDig
 const daysSince = (d) => (!d ? Infinity : Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 const normPhone = (v) => String(v || "").replace(/[^0-9]/g, "").replace(/^968/, "").replace(/^0+/, "");
 const normType = (v, def) => { const s = String(v || "").trim().toLowerCase(); if (!s) return def; if (s.includes("free") || s.includes(tr("فري"))) return "Freelancer"; if (s.includes("full") || s.includes(tr("فول")) || s.includes(tr("ثابت")) || s.includes(tr("دوام"))) return "Full Time"; return def; };
+// توحيد قيمة المركبة المستوردة إلى القيمة المعتمدة (Car/Bike) حتى يعمل الفلتر
+const normVehicle = (v) => { const s = String(v || "").trim().toLowerCase(); if (!s) return ""; if (s.includes("سيار") || s.includes("car") || s.includes("سياره")) return "Car"; if (s.includes("دراج") || s.includes("دباج") || s.includes("دباب") || s.includes("bike") || s.includes("motor") || s.includes("scooter") || s.includes("سكوتر")) return "Bike"; return String(v).trim(); };
 // تصنيف الجنسية من نص حرّ: عماني / أجنبي / غير محدد (للفارغ)
 const natClass = (v) => { const s = String(v || "").trim().toLowerCase(); if (!s) return "unknown"; if (s.includes("عمان") || s.includes("عُمان") || s === "om" || s === "omn" || s.includes("oman") || s.includes("omani")) return "omani"; return "foreign"; };
 const lastDays = (n) => { const a = []; for (let i = 0; i < n; i++) { const d = new Date(); d.setDate(d.getDate() - i); a.push(d.toISOString().slice(0, 10)); } return a; };
@@ -1030,7 +1032,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
     if (valid.length === 0) return;
     const news = valid.map((x) => ({
       id: uid(), name: x.name, phone: x.phone, companyId: x.companyId || "", civil: x.civil, area: x.rarea, commission: x.commission || "", company: company || comp, type: x.rtype,
-      joinDate: todayStr(), status: "Active", bank: x.bank, bankName: x.bankName || "", swift: x.swift || "", nationality: x.nationality || "", vehicleType: x.vehicle || "", notes: "", username: x.phone, password: pw, lastWorked: null,
+      joinDate: todayStr(), status: "Active", bank: x.bank, bankName: x.bankName || "", swift: x.swift || "", nationality: x.nationality || "", vehicleType: normVehicle(x.vehicle), notes: "", username: x.phone, password: pw, lastWorked: null,
     }));
     onAdd(news);
   };
