@@ -986,12 +986,12 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
   const [text, setText] = useState("");
   const [headers, setHeaders] = useState(null);
   const [xrows, setXrows] = useState([]);
-  const [xmap, setXmap] = useState({ name: 0, phone: 1, companyId: 2, type: 3, area: 4, commission: 5, civil: 6, bank: 7, bankName: 8, swift: 9 });
+  const [xmap, setXmap] = useState({ name: 0, phone: 1, companyId: 2, type: 3, area: 4, commission: 5, civil: 6, bank: 7, bankName: 8, swift: 9, nationality: 10, vehicle: 11 });
   const allAreas = Array.from(new Set(existing.map((r) => r.area).filter(Boolean))).sort();
 
   const parsePaste = () => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
     const p = l.split(/\t|,|،|  +/).map((s) => s.trim());
-    return { name: p[0] || "", phone: p[1] || "", companyId: p[2] || "", type: p[3] || "", area: p[4] || "", commission: p[5] || "", civil: p[6] || "", bank: p[7] || "" };
+    return { name: p[0] || "", phone: p[1] || "", companyId: p[2] || "", type: p[3] || "", area: p[4] || "", commission: p[5] || "", civil: p[6] || "", bank: p[7] || "", nationality: p[8] || "", vehicle: p[9] || "" };
   });
   const onFile = (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -1001,10 +1001,10 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
       const hs = (data[0] || []).map((x) => String(x));
       setHeaders(hs); setXrows(data.slice(1).filter((r) => r.some((c) => c !== "")));
       const g = (w) => { const i = hs.findIndex((h) => w.some((x) => String(h).toLowerCase().includes(x))); return i >= 0 ? i : 0; };
-      setXmap({ name: g(["name", tr("اسم")]), phone: g(["phone", tr("هاتف"), tr("جوال"), "mobile"]), companyId: g(["id", "ايدي", "الايدي", "معرف"]), type: g(["type", tr("نوع")]), area: g(["area", "region", tr("منطقة"), tr("محافظة")]), commission: g(["commission", tr("كوميشن"), tr("عمولة")]), civil: g(["civil", tr("مدني"), tr("بطاقة")]), bank: g(["account", tr("حساب"), "iban"]), bankName: g(["bank name", tr("البنك"), "bankname"]), swift: g(["swift", tr("سويفت")]) });
+      setXmap({ name: g(["name", tr("اسم")]), phone: g(["phone", tr("هاتف"), tr("جوال"), "mobile"]), companyId: g(["id", "ايدي", "الايدي", "معرف"]), type: g(["type", tr("نوع")]), area: g(["area", "region", tr("منطقة"), tr("محافظة")]), commission: g(["commission", tr("كوميشن"), tr("عمولة")]), civil: g(["civil", tr("مدني"), tr("بطاقة")]), bank: g(["account", tr("حساب"), "iban"]), bankName: g(["bank name", tr("البنك"), "bankname"]), swift: g(["swift", tr("سويفت")]), nationality: g(["nationality", tr("الجنسية"), tr("جنسية")]), vehicle: g(["vehicle", tr("المركبة"), tr("مركبة"), tr("السيارة"), "car"]) });
     });
   };
-  const parseExcel = () => xrows.map((r) => ({ name: String(r[xmap.name] || "").trim(), phone: String(r[xmap.phone] || "").trim(), companyId: String(r[xmap.companyId] || "").trim(), type: String(r[xmap.type] || "").trim(), area: String(r[xmap.area] || "").trim(), commission: String(r[xmap.commission] || "").trim(), civil: String(r[xmap.civil] || "").trim(), bank: String(r[xmap.bank] || "").trim(), bankName: String(r[xmap.bankName] || "").trim(), swift: String(r[xmap.swift] || "").trim() }));
+  const parseExcel = () => xrows.map((r) => ({ name: String(r[xmap.name] || "").trim(), phone: String(r[xmap.phone] || "").trim(), companyId: String(r[xmap.companyId] || "").trim(), type: String(r[xmap.type] || "").trim(), area: String(r[xmap.area] || "").trim(), commission: String(r[xmap.commission] || "").trim(), civil: String(r[xmap.civil] || "").trim(), bank: String(r[xmap.bank] || "").trim(), bankName: String(r[xmap.bankName] || "").trim(), swift: String(r[xmap.swift] || "").trim(), nationality: String(r[xmap.nationality] || "").trim(), vehicle: String(r[xmap.vehicle] || "").trim() }));
 
   const parsed = (mode === "paste" ? parsePaste() : (headers ? parseExcel() : [])).filter((x) => x.name || x.phone);
   const existingPhones = new Set(existing.map((r) => normPhone(r.phone)));
@@ -1018,8 +1018,8 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
   const valid = rows.filter((x) => !x.dup);
 
   const downloadRegTemplate = () => {
-    const header = ["الاسم / Name", "الهاتف / Phone", "الايدي / ID", "النوع / Type", "المنطقة / Area", "الكوميشن / Commission", "المدني / Civil", "رقم الحساب / Account", "البنك / Bank", "سويفت / SWIFT"];
-    const example = ["أحمد البلوشي", "92001010", "SN-1001", "Freelancer", "نزوى", "1.400", "11223344", "OM12 0001 9999", "Bank Muscat", "BMUSOMRX"];
+    const header = ["الاسم / Name", "الهاتف / Phone", "الايدي / ID", "النوع / Type", "المنطقة / Area", "الكوميشن / Commission", "المدني / Civil", "رقم الحساب / Account", "البنك / Bank", "سويفت / SWIFT", "الجنسية / Nationality", "المركبة / Vehicle"];
+    const example = ["أحمد البلوشي", "92001010", "SN-1001", "Freelancer", "نزوى", "1.400", "11223344", "OM12 0001 9999", "Bank Muscat", "BMUSOMRX", "عماني", "سيارة"];
     const ws = XLSX.utils.aoa_to_sheet([header, example]);
     ws["!cols"] = header.map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
@@ -1030,7 +1030,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
     if (valid.length === 0) return;
     const news = valid.map((x) => ({
       id: uid(), name: x.name, phone: x.phone, companyId: x.companyId || "", civil: x.civil, area: x.rarea, commission: x.commission || "", company: company || comp, type: x.rtype,
-      joinDate: todayStr(), status: "Active", bank: x.bank, bankName: x.bankName || "", swift: x.swift || "", notes: "", username: x.phone, password: pw, lastWorked: null,
+      joinDate: todayStr(), status: "Active", bank: x.bank, bankName: x.bankName || "", swift: x.swift || "", nationality: x.nationality || "", vehicleType: x.vehicle || "", notes: "", username: x.phone, password: pw, lastWorked: null,
     }));
     onAdd(news);
   };
@@ -1062,7 +1062,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
           <div className="flex items-center gap-2 flex-wrap"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold" /><Btn kind="ghost" onClick={downloadRegTemplate}><Download size={15} /> {t("تحميل نموذج تسجيل", "Download Registration Template")}</Btn></div>
           {headers && (
             <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-3">
-              {[["name", tr("الاسم")], ["phone", tr("الهاتف")], ["companyId", "ID"], ["type", tr("النوع")], ["area", tr("المنطقة")], ["commission", t("الكوميشن", "Commission")], ["civil", tr("المدني")], ["bank", t("رقم الحساب", "Account")], ["bankName", t("البنك", "Bank")], ["swift", t("سويفت", "SWIFT")]].map(([k, l]) => (
+              {[["name", tr("الاسم")], ["phone", tr("الهاتف")], ["companyId", "ID"], ["type", tr("النوع")], ["area", tr("المنطقة")], ["commission", t("الكوميشن", "Commission")], ["civil", tr("المدني")], ["bank", t("رقم الحساب", "Account")], ["bankName", t("البنك", "Bank")], ["swift", t("سويفت", "SWIFT")], ["nationality", t("الجنسية", "Nationality")], ["vehicle", t("المركبة", "Vehicle")]].map(([k, l]) => (
                 <Field key={k} label={l}><select className={inputCls} value={xmap[k]} onChange={(e) => setXmap({ ...xmap, [k]: +e.target.value })}>{headers.map((h, i) => <option key={i} value={i}>{h || `${tr("عمود")} ${i + 1}`}</option>)}</select></Field>
               ))}
             </div>
