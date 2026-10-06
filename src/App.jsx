@@ -1373,7 +1373,6 @@ function OrdersTab({ company, db, save, user }) {
   }[company];
   return (
     <div className="space-y-5">
-      <Card className="p-4 text-sm text-slate-600">{note}</Card>
       <ExcelImporter company={company} riders={db.riders} onActivate={(rid) => save({ ...db, riders: db.riders.map((r) => (r.id === rid ? { ...r, status: "Active" } : r)) })} onApply={onApply} onAddRider={(nr) => { const p = String(nr.phone || "").replace(/\D/g, ""); const c = String(nr.companyId || "").trim(); const exists = db.riders.some((x) => (p && String(x.phone).replace(/\D/g, "") === p) || (c && (x.companyId || "") === c)); if (exists) { alert(t("هذا المندوب مسجّل بالفعل", "This rider already exists")); return; } const pick = makeAgentPicker(db, company); save({ ...db, riders: [...db.riders, { ...nr, id: uid(), lastWorked: null, codAgent: nr.codAgent || pick() }] }); }} />
 
       <Card className="p-5">
