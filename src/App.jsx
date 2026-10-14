@@ -1366,11 +1366,6 @@ function OrdersTab({ company, db, save, user }) {
     setEditImp(null);
   };
   const deleteImport = (id) => { if (window.confirm(t("حذف هذا الشيت نهائياً؟", "Delete this sheet permanently?"))) save({ ...db, imports: db.imports.filter((im) => im.id !== id) }); };
-  const note = {
-    Talabat: tr("الطلبات: فريلانسر فقط. تُقرأ الطلبات و COD والمبلغ المطلوب تحويله من الشيت."),
-    Snoonu: tr("سنونو: فريلانسر = 1.400/طلب · Full Time = 425 ثابت. COD يحوّل يومياً · الفريلانسر كل 10 أيام."),
-    Aramex: tr("أرامكس: فريلانسر = 0.700/طلب · Full Time = 200 ثابت + (≥300 طلب: +200 و 0.700 للطلب الإضافي) وإلا 0.600/طلب."),
-  }[company];
   return (
     <div className="space-y-5">
       <ExcelImporter company={company} riders={db.riders} onActivate={(rid) => save({ ...db, riders: db.riders.map((r) => (r.id === rid ? { ...r, status: "Active" } : r)) })} onApply={onApply} onAddRider={(nr) => { const p = String(nr.phone || "").replace(/\D/g, ""); const c = String(nr.companyId || "").trim(); const exists = db.riders.some((x) => (p && String(x.phone).replace(/\D/g, "") === p) || (c && (x.companyId || "") === c)); if (exists) { alert(t("هذا المندوب مسجّل بالفعل", "This rider already exists")); return; } const pick = makeAgentPicker(db, company); save({ ...db, riders: [...db.riders, { ...nr, id: uid(), lastWorked: null, codAgent: nr.codAgent || pick() }] }); }} />
@@ -2420,6 +2415,7 @@ function OperationsTab({ company, db }) {
   const [lbType, setLbType] = useState("Freelancer");
   const [lbScope, setLbScope] = useState("day");
   const [hrScope, setHrScope] = useState("day");
+  const [apType, setApType] = useState("all"); const [apNat, setApNat] = useState("all"); const [apVeh, setApVeh] = useState("all"); // فلاتر أداء المناطق
   const FULL_DAY = 8;
 
   const inArea = (rid) => { const r = rIdx[rid]; return area === "all" || (r && (r.area || "") === area); };
@@ -2472,8 +2468,11 @@ function OperationsTab({ company, db }) {
   const sumIdx = (a, b) => allDates.slice(Math.max(0, a), Math.max(0, b)).reduce((s, d) => s + sumBy(resultsOn(d), "orders"), 0);
   const wkCur = sumIdx(idx - 6, idx + 1), wkPrev = sumIdx(idx - 13, idx - 6);
   const moCur = sumIdx(idx - 29, idx + 1), moPrev = sumIdx(idx - 59, idx - 29);
-  const byArea = {}; curRes.forEach((r) => { const ar = (rIdx[r.riderId] && rIdx[r.riderId].area) || "—"; const g = byArea[ar] = byArea[ar] || { area: ar, orders: 0, riders: 0, hours: 0 }; g.orders += Number(r.orders) || 0; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); if ((Number(r.orders) || 0) > 0) g.riders += 1; });
+  const apMatch = (rid) => { const r = rIdx[rid]; if (!r) return false; if (apType !== "all" && r.type !== apType) return false; if (apNat !== "all" && natClass(r.nationality) !== apNat) return false; if (apVeh !== "all" && (r.vehicleType || "") !== apVeh) return false; return true; };
+  const apRes = curRes.filter((r) => apMatch(r.riderId));
+  const byArea = {}; apRes.forEach((r) => { const ar = (rIdx[r.riderId] && rIdx[r.riderId].area) || "—"; const g = byArea[ar] = byArea[ar] || { area: ar, orders: 0, riders: 0, hours: 0 }; g.orders += Number(r.orders) || 0; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); if ((Number(r.orders) || 0) > 0) g.riders += 1; });
   const areaRows = Object.values(byArea).sort((a, b) => b.orders - a.orders);
+  const exportAreaPerf = () => exportExcel(areaRows.map((g) => ({ "المنطقة": g.area, "الطلبات": g.orders, "المناديب": g.riders, "الساعات": Math.round(g.hours * 10) / 10, "طلب/ساعة": g.hours > 0 ? Math.round((g.orders / g.hours) * 10) / 10 : 0 })), "AreaPerformance_" + company + "_" + date);
   const absent = db.riders.filter((r) => r.company === company && r.status === "Active" && (area === "all" || (r.area || "") === area) && r.lastWorked && daysSince(r.lastWorked) >= 7).map((r) => ({ r, days: daysSince(r.lastWorked) })).sort((a, b) => b.days - a.days);
   const exportOps = () => exportExcel(lbSorted.map((x, i) => ({ "الترتيب": i + 1, "المندوب": rName(x.rid), ID: rCid(x.rid), "المنطقة": rArea(x.rid), "الطلبات": x.orders, "الساعات": Math.round(x.hours * 10) / 10 })), "Operations_" + company + "_" + date);
   const kpi = (label, value, cur, prev, color) => (
@@ -2587,7 +2586,15 @@ function OperationsTab({ company, db }) {
       </Card>
 
       <Card className="p-5">
-        <h3 className="font-bold text-slate-800 mb-3">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 className="font-bold text-slate-800">{t("أداء المناطق (اليوم المحدد)", "Area performance (selected day)")}</h3>
+          <div className="flex gap-2 flex-wrap items-center">
+            <select value={apType} onChange={(e) => setApType(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"><option value="all">{t("كل الأنواع", "All types")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option></select>
+            <select value={apNat} onChange={(e) => setApNat(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عماني", "Omani")}</option><option value="foreign">{t("أجنبي", "Foreign")}</option></select>
+            <select value={apVeh} onChange={(e) => setApVeh(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سائق (سيارة)", "Driver (Car)")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
+            <Btn kind="ghost" size="sm" onClick={exportAreaPerf}><Download size={14} /> Excel</Btn>
+          </div>
+        </div>
         <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المنطقة", "Area"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("الساعات", "Hours"), t("طلب/ساعة", "Orders/hr")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
@@ -4632,12 +4639,12 @@ function RegistrationForm({ onToggleLang, lockedCompany }) {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
   const [areas, setAreas] = useState([]);
-  useEffect(() => { supabase.functions.invoke("submit-registration", { body: { action: "getAreas" } }).then(({ data }) => { if (data && Array.isArray(data.areas)) setAreas(data.areas); }).catch(() => {}); }, []);
+  useEffect(() => { supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => { const st = (data && data.data) || {}; const ar = Array.from(new Set([...(st.areas || []), ...((st.riders || []).map((r) => r.area).filter(Boolean))])).sort(); if (ar.length) setAreas(ar); }).catch(() => {}); }, []);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = () => {
     if (!f.fullName.trim() || !f.phone.trim()) return setErr(t("الاسم ورقم الهاتف مطلوبان", "Name and phone are required"));
     setBusy(true); setErr("");
-    supabase.functions.invoke("submit-registration", { body: { ...f, hasLicense: f.hasLicense === "yes" } }).then(({ data, error }) => {
+    supabase.rpc("submit_registration", { p_reg: { ...f, hasLicense: f.hasLicense === "yes" } }).then(({ data, error }) => {
       setBusy(false);
       if (data && data.duplicate) { setErr("DUP"); return; }
       if (error || (data && data.error)) return setErr((data && data.error) ? String(data.error) : t("تعذّر الإرسال، حاول مرة أخرى", "Submission failed, try again"));
