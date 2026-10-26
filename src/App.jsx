@@ -3974,6 +3974,8 @@ function RegistrationModule({ db, save, user, onRefresh }) {
         <StatCard label={t("تم تسجيلهم", "Registered")} value={counts.completed} color={REG_STATUS_COLOR.completed} />
       </div>
 
+      {isManager && <IntakeLinkMaker zones={Array.from(new Set([...(db.areas || []), ...regAreas, ...db.riders.map((r) => r.area).filter(Boolean)].map((z) => String(z).trim()).filter(Boolean))).sort()} />}
+
       <Card className="p-4">
         <h3 className="font-bold text-slate-800 text-sm mb-2">{t("عدد الطلبات لكل موظف", "Requests per assignee")}</h3>
         <div className="flex flex-wrap gap-2">{agents.length === 0 ? <span className="text-sm text-slate-400">{t("لا يوجد موظفون مخوّلون — فعّلهم من نافذة الموظفين", "No authorized agents — enable them from Employees")}</span> : agents.map((s) => <span key={s.id} className="text-sm px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100"><b>{s.name}</b>: {perStaff[s.id] || 0}</span>)}</div>
@@ -4021,6 +4023,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel ? sel.fullName : ""} wide>
         {sel && (() => { const r = regs.find((x) => x.id === sel.id) || sel; const st = regStatus(r); return (
           <div className="space-y-4">
+            <RegDocs r={r} />
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
               <div><span className="text-slate-400 text-xs">{t("الهاتف", "Phone")}</span><div dir="ltr">{r.phone}</div></div>
               <div><span className="text-slate-400 text-xs">{t("البريد", "Email")}</span><div dir="ltr">{r.email || "—"}</div></div>
@@ -4657,6 +4660,203 @@ function RegInvalid({ onToggleLang }) {
   );
 }
 
+// ===== فورم المندوب بالرابط المقفل: المنطقة من الأدمن، والباقي يُفرض على السيرفر =====
+const INTAKE_DOCS = [
+  ["civilFront", "Civil ID — Front", "البطاقة المدنية (أمام)"],
+  ["civilBack", "Civil ID — Back", "البطاقة المدنية (خلف)"],
+  ["licenseFront", "Driving License — Front", "رخصة القيادة (أمام)"],
+  ["licenseBack", "Driving License — Back", "رخصة القيادة (خلف)"],
+  ["mulkiyaFront", "Vehicle Registration — Front", "ملكية السيارة (أمام)"],
+  ["mulkiyaBack", "Vehicle Registration — Back", "ملكية السيارة (خلف)"],
+  ["personal", "Personal Photo", "صورة شخصية"],
+];
+
+function IntakeForm({ token, onToggleLang }) {
+  const [zone, setZone] = useState("");
+  const [valid, setValid] = useState(null); // null = جارٍ التحقق
+  const [f, setF] = useState({ plate: "", fullName: "", idNumber: "", phone: "", civilExpiry: "", licenseExpiry: "" });
+  const [files, setFiles] = useState({});
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [err, setErr] = useState("");
+  const [ref, setRef] = useState("");
+  useEffect(() => {
+    supabase.rpc("get_intake_zone", { p_token: token }).then(({ data, error }) => {
+      if (error || !data || !data.zone) setValid(false); else { setZone(data.zone); setValid(true); }
+    }).catch(() => setValid(false));
+  }, [token]);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const ERR = {
+    invalid_link: t("هذا الرابط غير صالح أو تم استخدامه.", "This link is invalid or was already used."),
+    missing_fields: t("عبّئ كل الحقول المطلوبة.", "Fill in all required fields."),
+    missing_dates: t("أدخل تاريخ انتهاء البطاقة والرخصة.", "Enter both expiry dates."),
+    consent_required: t("يجب الموافقة على الإقرار.", "You must accept the declaration."),
+    missing_docs: t("ارفع كل المستندات السبعة.", "Upload all seven documents."),
+  };
+
+  const submit = async () => {
+    const empty = Object.keys(f).some((k) => !String(f[k] || "").trim());
+    if (empty) return setErr(t("عبّئ كل الحقول المطلوبة.", "Fill in all required fields."));
+    if (INTAKE_DOCS.some(([k]) => !files[k])) return setErr(t("ارفع كل المستندات السبعة.", "Upload all seven documents."));
+    if (!consent) return setErr(t("يجب الموافقة على الإقرار.", "You must accept the declaration."));
+    setBusy(true); setErr("");
+    try {
+      const docs = {};
+      for (let i = 0; i < INTAKE_DOCS.length; i++) {
+        const [key, en] = INTAKE_DOCS[i];
+        const file = files[key];
+        setProgress(t("جاري رفع: ", "Uploading: ") + en + " (" + (i + 1) + "/" + INTAKE_DOCS.length + ")");
+        const ext = ((file.name || "").split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const path = token + "/" + key + "-" + Date.now() + "." + ext;
+        const { error } = await supabase.storage.from("rider-docs").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+        if (error) throw new Error("upload");
+        docs[key] = path;
+      }
+      setProgress(t("جاري إرسال الطلب...", "Sending request..."));
+      const { data, error } = await supabase.rpc("submit_rider_intake", { p_token: token, p_reg: { ...f, consent: true, docs } });
+      if (error || !data) throw new Error("submit");
+      if (data.duplicate) throw new Error(t("هذا الرقم مسجّل مسبقاً لدينا.", "This phone number is already registered."));
+      if (data.error) throw new Error(ERR[data.error] || t("تعذّر الإرسال، حاول مرة أخرى.", "Submission failed, try again."));
+      setRef(data.ref || "");
+    } catch (e) {
+      const m = e && e.message;
+      setErr(m === "upload" ? t("تعذّر رفع أحد المستندات، حاول مرة أخرى.", "A file failed to upload, try again.") : (m === "submit" ? t("تعذّر الإرسال، حاول مرة أخرى.", "Submission failed, try again.") : (m || t("تعذّر الإرسال.", "Submission failed."))));
+    } finally { setBusy(false); setProgress(""); }
+  };
+
+  const locked = (label, value) => (
+    <Field label={label}><input className={inputCls} value={value} readOnly style={{ background: "#f8fafc", fontWeight: 700 }} /></Field>
+  );
+
+  return (
+    <div dir={dirOf()} className="min-h-screen bg-slate-50 flex items-center justify-center p-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+      <div className="w-full max-w-lg">
+        <div className="flex items-center justify-between mb-4">
+          <img src={LOGO_FULL} alt={TENANT.name} className="h-10" />
+          <button onClick={onToggleLang} className="text-xs font-semibold text-slate-500 flex items-center gap-1"><Globe size={14} /> {LANG === "en" ? "ع" : "EN"}</button>
+        </div>
+        {valid === null && <Card className="p-8 text-center text-sm text-slate-400">{t("جاري التحقق من الرابط...", "Checking link...")}</Card>}
+        {valid === false && <RegInvalid onToggleLang={onToggleLang} />}
+        {valid && ref && (
+          <Card className="p-8 text-center">
+            <div className="text-5xl mb-3">✅</div>
+            <h2 className="font-extrabold text-xl text-slate-800 mb-2">{t("تم استلام طلبك بنجاح", "Your request was received")}</h2>
+            <p className="text-sm text-slate-500 mb-3">{t("رقم المرجع:", "Reference no.:")} <b dir="ltr">{ref}</b></p>
+            <p className="text-sm text-slate-500">{t("سيتواصل معك فريقنا قريباً لإكمال إجراءات التسجيل.", "Our team will contact you soon to complete the registration.")}</p>
+          </Card>
+        )}
+        {valid && !ref && (
+          <Card className="p-6">
+            <h2 className="font-extrabold text-lg text-slate-800 mb-1">{t("تسجيل مندوب جديد", "New Driver Registration")}</h2>
+            <p className="text-xs text-slate-500 mb-5">{t("الحقول الرمادية ثابتة. عبّئ بياناتك وارفع مستنداتك ثم أرسل.", "Grey fields are fixed. Fill in your details, upload your documents, then submit.")}</p>
+
+            <div className="grid md:grid-cols-2 gap-4 mb-5">
+              {locked(t("الشركة", "Company"), "Olive")}
+              {locked(t("نوع العقد", "Contract Type"), "Part Time")}
+              {locked(t("نوع المركبة", "Vehicle Type"), "Car")}
+              {locked(t("الجنسية", "Nationality"), "Omani")}
+              {locked(t("المنطقة", "Zone"), zone)}
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 mb-5">
+              <Field label={t("الاسم الكامل (كما في البطاقة المدنية)", "Full name (as on Civil ID)")}><input className={inputCls} value={f.fullName} onChange={set("fullName")} /></Field>
+              <Field label={t("رقم البطاقة المدنية", "Civil ID No.")}><input className={inputCls} dir="ltr" value={f.idNumber} onChange={set("idNumber")} /></Field>
+              <Field label={t("رقم الهاتف", "Phone Number")}><input className={inputCls} dir="ltr" inputMode="tel" value={f.phone} onChange={set("phone")} /></Field>
+              <Field label={t("رقم اللوحة", "Plate Number")}><input className={inputCls} dir="ltr" value={f.plate} onChange={set("plate")} /></Field>
+              <Field label={t("تاريخ انتهاء البطاقة المدنية", "Civil ID Expiry Date")}><input type="date" className={inputCls} dir="ltr" value={f.civilExpiry} onChange={set("civilExpiry")} /></Field>
+              <Field label={t("تاريخ انتهاء رخصة القيادة", "License Expiry Date")}><input type="date" className={inputCls} dir="ltr" value={f.licenseExpiry} onChange={set("licenseExpiry")} /></Field>
+            </div>
+
+            <div className="mb-5">
+              <div className="font-bold text-slate-800 text-sm mb-2">{t("المستندات (7 ملفات)", "Documents (7 files)")}</div>
+              <div className="space-y-2">
+                {INTAKE_DOCS.map(([k, en, ar]) => (
+                  <div key={k} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="text-sm font-semibold text-slate-700 mb-1">{t(ar, en)} <span className="text-red-500">*</span> {files[k] ? <span style={{ color: "#0f9d58" }}>✓</span> : null}</div>
+                    <input type="file" accept="image/*,application/pdf" onChange={(e) => { const x = e.target.files && e.target.files[0]; setFiles((p) => ({ ...p, [k]: x || null })); }} className="text-xs" />
+                    {files[k] && <div className="text-[11px] text-slate-400 mt-1" dir="ltr">{files[k].name}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-slate-700 mb-5 cursor-pointer">
+              <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span>{t("أؤكد أن جميع المعلومات المقدمة صحيحة، وأن جميع المستندات المرفوعة تخصني وسارية.", "I confirm that all information provided is accurate and that all uploaded documents belong to me and are valid.")} <span className="text-red-500">*</span></span>
+            </label>
+
+            {err && <div className="text-sm text-red-600 mb-3">{err}</div>}
+            {busy && progress && <div className="text-xs text-slate-500 mb-3">{progress}</div>}
+            <button onClick={submit} disabled={busy} className="w-full rounded-lg py-3 font-bold text-white" style={{ background: busy ? "#94a3b8" : BRAND.navy }}>{busy ? t("جاري الإرسال...", "Submitting...") : t("إرسال (Submit)", "Submit")}</button>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== الأدمن: إنشاء رابط تسجيل لمنطقة محددة =====
+function IntakeLinkMaker({ zones }) {
+  const [zone, setZone] = useState("");
+  const [link, setLink] = useState("");
+  const [err, setErr] = useState("");
+  const [copied, setCopied] = useState(false);
+  const make = () => {
+    if (!zone) return setErr(t("اختر المنطقة أولاً", "Choose a zone first"));
+    setErr(""); setCopied(false);
+    supabase.rpc("create_intake_link", { p_zone: zone }).then(({ data, error }) => {
+      if (error || !data) return setErr(t("تعذّر إنشاء الرابط", "Could not create the link"));
+      setLink(window.location.origin + window.location.pathname + "#intake/" + data);
+    });
+  };
+  const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); } catch (e) { /* ignore */ } };
+  return (
+    <Card className="p-4">
+      <h3 className="font-bold text-slate-800 text-sm mb-2">{t("رابط تسجيل مندوب (منطقة مقفلة)", "Driver intake link (locked zone)")}</h3>
+      <div className="flex gap-2 flex-wrap items-end">
+        <Field label={t("المنطقة", "Zone")}><select className={inputCls} value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{t("— اختر —", "— select —")}</option>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select></Field>
+        <Btn onClick={make}>{t("إنشاء الرابط", "Create link")}</Btn>
+      </div>
+      {err && <div className="text-xs text-red-600 mt-2">{err}</div>}
+      {link && (
+        <div className="mt-3 flex gap-2 items-center flex-wrap">
+          <input className={inputCls} dir="ltr" readOnly value={link} onFocus={(e) => e.target.select()} />
+          <Btn kind="ghost" onClick={copy}>{copied ? t("تم النسخ ✓", "Copied ✓") : t("نسخ", "Copy")}</Btn>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-400 mt-2">{t("كل رابط يُستخدم مرة واحدة، وتكون المنطقة فيه ثابتة.", "Each link works once and its zone is fixed.")}</p>
+    </Card>
+  );
+}
+
+// ===== الأدمن: بيانات الفورم والمستندات داخل طلب التسجيل =====
+function RegDocs({ r }) {
+  const docs = r.docs || {};
+  const hasAny = Object.keys(docs).length > 0 || r.plate || r.civilExpiry || r.licenseExpiry;
+  if (!hasAny) return null;
+  const open = (path) => supabase.storage.from("rider-docs").createSignedUrl(path, 600).then(({ data, error }) => {
+    if (error || !data || !data.signedUrl) return alert(t("تعذّر فتح المستند", "Could not open the file"));
+    window.open(data.signedUrl, "_blank", "noopener");
+  });
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-100 p-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+        <div><span className="text-slate-400 text-xs">{t("رقم اللوحة", "Plate")}</span><div dir="ltr">{r.plate || "—"}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("انتهاء البطاقة", "Civil ID expiry")}</span><div dir="ltr">{r.civilExpiry || "—"}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("انتهاء الرخصة", "License expiry")}</span><div dir="ltr">{r.licenseExpiry || "—"}</div></div>
+      </div>
+      {Object.keys(docs).length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {INTAKE_DOCS.map(([k, en, ar]) => (
+            <button key={k} onClick={() => docs[k] && open(docs[k])} disabled={!docs[k]} className="text-xs text-start rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 disabled:opacity-40">{t(ar, en)}{docs[k] ? " 📄" : " ✗"}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RegistrationForm({ onToggleLang, lockedCompany }) {
   const blank = { fullName: "", phone: "", email: "", nationality: "", idNumber: "", wilaya: "", company: lockedCompany || "", vehicleType: "motorcycle", hasLicense: "yes", bankName: "", bank: "", swift: "", notes: "" };
   const [f, setF] = useState(blank);
@@ -4891,6 +5091,10 @@ export default function App() {
     );
   }
 
+  if (typeof window !== "undefined" && (window.location.hash || "").replace(/^#\/?/, "").toLowerCase().startsWith("intake/")) {
+    const itoken = ((window.location.hash || "").replace(/^#\/?/, "").split("/")[1] || "").replace(/[^a-z0-9]/gi, "");
+    return <IntakeForm token={itoken} onToggleLang={toggleLang} />;
+  }
   if (typeof window !== "undefined" && (window.location.hash || "").replace(/^#\/?/, "").toLowerCase().startsWith("register")) {
     const raw = (window.location.hash || "").replace(/^#\/?/, "").split("/");
     const key = raw[1] || "";
