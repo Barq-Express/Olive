@@ -3976,7 +3976,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
 
       {isManager && <IntakeLinkMaker zones={Array.from(new Set([...(db.areas || []), ...regAreas, ...db.riders.map((r) => r.area).filter(Boolean)].map((z) => String(z).trim()).filter(Boolean))).sort()} />}
 
-      {isManager && <SnoonuExport regs={regs} />}
+      {isManager && <SnoonuExport regs={regs} db={db} save={save} />}
 
       <Card className="p-4">
         <h3 className="font-bold text-slate-800 text-sm mb-2">{t("عدد الطلبات لكل موظف", "Requests per assignee")}</h3>
@@ -4840,22 +4840,31 @@ const SNOONU_DOC_HEADERS = {
   personal: "Personal Picture",
 };
 
-function SnoonuExport({ regs }) {
+function SnoonuExport({ regs, db, save }) {
   const [busy, setBusy] = useState(false);
+  const [scope, setScope] = useState("new");
+  const [zoneF, setZoneF] = useState("all");
+  const zonesAll = Array.from(new Set(regs.map((r) => (r.wilaya || "").trim()).filter(Boolean))).sort();
   const ready = regs.filter((r) => regStatus(r) === "ready");
+  const pick = ready.filter((r) => (scope === "new" ? !r.snoonuExportedAt : true) && (zoneF === "all" || (r.wilaya || "").trim() === zoneF));
+  const markSent = (ids) => save({ ...db, registrations: regs.map((r) => (ids.includes(r.id) ? { ...r, snoonuExportedAt: todayStr() } : r)) });
+  const markAllReady = () => {
+    if (!ready.length) return;
+    if (window.confirm(t("تعليم " + ready.length + " مندوب جاهز كـ «تم إرسالهم لسنونو»؟ ما راح ينصدّرون مرة ثانية في «الجدد فقط».", "Mark " + ready.length + " ready riders as already sent to Snoonu?"))) markSent(ready.map((r) => r.id));
+  };
   const run = async () => {
-    if (!ready.length || busy) return;
+    if (!pick.length || busy) return;
     setBusy(true);
     try {
       const paths = [];
-      ready.forEach((r) => INTAKE_DOCS.forEach(([k]) => { if (r.docs && r.docs[k]) paths.push(r.docs[k]); }));
+      pick.forEach((r) => INTAKE_DOCS.forEach(([k]) => { if (r.docs && r.docs[k]) paths.push(r.docs[k]); }));
       const urls = {};
       if (paths.length) {
         const { data, error } = await supabase.storage.from("rider-docs").createSignedUrls(paths, 315360000); // 10 سنوات تقريباً
         if (error) throw error;
         (data || []).forEach((x) => { if (x && x.signedUrl && x.path) urls[x.path] = x.signedUrl; });
       }
-      const rows = ready.map((r) => {
+      const rows = pick.map((r) => {
         const row = {
           "3PL Company Name": "Olive",
           "Contract Type": "Part Time",
@@ -4872,18 +4881,28 @@ function SnoonuExport({ regs }) {
         INTAKE_DOCS.forEach(([k]) => { row[SNOONU_DOC_HEADERS[k]] = (r.docs && r.docs[k] && urls[r.docs[k]]) || ""; });
         return row;
       });
-      exportExcel(rows, "Snoonu_Riders_" + todayStr());
+      exportExcel(rows, "Snoonu_Riders_" + (zoneF === "all" ? "All" : zoneF) + "_" + todayStr());
+      markSent(pick.map((r) => r.id));
     } catch (e) {
       alert(t("تعذّر إنشاء التصدير، حاول مرة أخرى.", "Export failed, try again."));
     } finally { setBusy(false); }
   };
   return (
-    <Card className="p-4 flex items-center justify-between gap-3 flex-wrap">
-      <div>
-        <h3 className="font-bold text-slate-800 text-sm">{t("تصدير لسنونو", "Export for Snoonu")}</h3>
-        <p className="text-[11px] text-slate-400">{t("المناديب بحالة «جاهز للتحويل»:", "Riders with status «Ready to convert»:")} <b>{ready.length}</b> · {t("روابط الصور دائمة (لا تنتهي)", "photo links never expire")}</p>
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="font-bold text-slate-800 text-sm">{t("تصدير لسنونو", "Export for Snoonu")} <span className="text-xs font-normal text-slate-400">({t("جاهز للتحويل", "ready")}: {ready.length})</span></h3>
+        <div className="flex gap-1">
+          {[["new", t("الجدد فقط", "New only")], ["all", t("الكل", "All ready")]].map(([k, l]) => (
+            <button key={k} onClick={() => setScope(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={scope === k ? { background: BRAND.navy, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
+          ))}
+        </div>
       </div>
-      <Btn onClick={run} disabled={!ready.length || busy}>{busy ? t("جاري التجهيز...", "Preparing...") : t("تحميل Excel", "Download Excel")}</Btn>
+      <div className="flex gap-2 flex-wrap items-end">
+        <Field label={t("المنطقة", "Zone")}><select className={inputCls} value={zoneF} onChange={(e) => setZoneF(e.target.value)}><option value="all">{t("كل المناطق", "All zones")}</option>{zonesAll.map((z) => <option key={z} value={z}>{z}</option>)}</select></Field>
+        <Btn onClick={run} disabled={!pick.length || busy}>{busy ? t("جاري التجهيز...", "Preparing...") : t("تحميل Excel", "Download Excel")} ({pick.length})</Btn>
+        <Btn kind="ghost" onClick={markAllReady} disabled={!ready.length}>{t("تعليم الجاهزين الحاليين كمُرسلين", "Mark current ready as sent")}</Btn>
+      </div>
+      <p className="text-[11px] text-slate-400">{t("«الجدد فقط» = اللي ما انصدّروا قبل. كل تحميل يعلّم المناديب كمُرسلين تلقائياً.", "“New only” = not exported before. Each download marks them as sent automatically.")}</p>
     </Card>
   );
 }
