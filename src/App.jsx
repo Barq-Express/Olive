@@ -4695,11 +4695,13 @@ function IntakeForm({ token, onToggleLang }) {
     missing_dates: t("أدخل تاريخ انتهاء البطاقة والرخصة.", "Enter both expiry dates."),
     consent_required: t("يجب الموافقة على الإقرار.", "You must accept the declaration."),
     missing_docs: t("ارفع كل المستندات السبعة.", "Upload all seven documents."),
+    name_not_english: t("اكتب الاسم بالإنجليزي كما هو في البطاقة المدنية.", "Write your name in English exactly as on your Civil ID."),
   };
 
   const submit = async () => {
     const empty = Object.keys(f).some((k) => !String(f[k] || "").trim());
     if (empty) return setErr(t("عبّئ كل الحقول المطلوبة.", "Fill in all required fields."));
+    if (!/^[A-Za-z][A-Za-z .'-]*$/.test(f.fullName.trim())) return setErr(ERR.name_not_english);
     if (INTAKE_DOCS.some(([k]) => !files[k])) return setErr(t("ارفع كل المستندات السبعة.", "Upload all seven documents."));
     if (!consent) return setErr(t("يجب الموافقة على الإقرار.", "You must accept the declaration."));
     setBusy(true); setErr("");
@@ -4762,7 +4764,7 @@ function IntakeForm({ token, onToggleLang }) {
             </div>
 
             <div className="grid md:grid-cols-2 gap-4 mb-5">
-              <Field label={t("الاسم الكامل (كما في البطاقة المدنية)", "Full name (as on Civil ID)")}><input className={inputCls} value={f.fullName} onChange={set("fullName")} /></Field>
+              <Field label={t("الاسم بالإنجليزي (كما في البطاقة المدنية)", "Full name in English (as on Civil ID)")}><input className={inputCls} dir="ltr" placeholder="AHMED SALIM ALBALUSHI" value={f.fullName} onChange={set("fullName")} /></Field>
               <Field label={t("رقم البطاقة المدنية", "Civil ID No.")}><input className={inputCls} dir="ltr" value={f.idNumber} onChange={set("idNumber")} /></Field>
               <Field label={t("رقم الهاتف", "Phone Number")}><input className={inputCls} dir="ltr" inputMode="tel" value={f.phone} onChange={set("phone")} /></Field>
               <Field label={t("رقم اللوحة", "Plate Number")}><input className={inputCls} dir="ltr" value={f.plate} onChange={set("plate")} /></Field>
@@ -4813,6 +4815,19 @@ function IntakeLinkMaker({ zones }) {
     });
   };
   const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); } catch (e) { /* ignore */ } };
+  const msg = link ? [
+    t("مرحباً 👋", "Hello 👋"),
+    t("فريق Olive يدعوك للتسجيل كمندوب توصيل.", "The Olive team invites you to register as a delivery rider."),
+    t("سجّل من هذا الرابط، وارفع مستنداتك بنفسك:", "Register through this link and upload your documents yourself:"),
+    link,
+    "",
+    t("قبل ما تبدأ:", "Before you start:"),
+    t("• اكتب اسمك بالإنجليزي تماماً كما هو في البطاقة المدنية.", "• Write your name in English exactly as on your Civil ID."),
+    t("• جهّز صوراً واضحة للبطاقة المدنية والرخصة وملكية السيارة وصورة شخصية.", "• Prepare clear photos of your Civil ID, license, vehicle registration and a personal photo."),
+    "",
+    t("نتمنى لك التوفيق 🌟", "Good luck 🌟"),
+  ].join("\n") : "";
+  const copyMsg = () => { try { navigator.clipboard.writeText(msg); setCopied(true); } catch (e) { /* ignore */ } };
   return (
     <Card className="p-4">
       <h3 className="font-bold text-slate-800 text-sm mb-2">{t("رابط تسجيل مندوب (منطقة مقفلة)", "Driver intake link (locked zone)")}</h3>
@@ -4822,12 +4837,18 @@ function IntakeLinkMaker({ zones }) {
       </div>
       {err && <div className="text-xs text-red-600 mt-2">{err}</div>}
       {link && (
-        <div className="mt-3 flex gap-2 items-center flex-wrap">
-          <input className={inputCls} dir="ltr" readOnly value={link} onFocus={(e) => e.target.select()} />
-          <Btn kind="ghost" onClick={copy}>{copied ? t("تم النسخ ✓", "Copied ✓") : t("نسخ", "Copy")}</Btn>
+        <div className="mt-3 space-y-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            <input className={inputCls} dir="ltr" readOnly value={link} onFocus={(e) => e.target.select()} />
+            <Btn kind="ghost" onClick={copy}>{t("نسخ الرابط", "Copy link")}</Btn>
+          </div>
+          <textarea className={inputCls} rows={9} readOnly value={msg} onFocus={(e) => e.target.select()} />
+          <div className="flex gap-2 items-center">
+            <Btn onClick={copyMsg}>{copied ? t("تم نسخ الرسالة ✓", "Message copied ✓") : t("نسخ الرسالة كاملة", "Copy full message")}</Btn>
+          </div>
         </div>
       )}
-      <p className="text-[11px] text-slate-400 mt-2">{t("كل رابط يُستخدم مرة واحدة، وتكون المنطقة فيه ثابتة.", "Each link works once and its zone is fixed.")}</p>
+      <p className="text-[11px] text-slate-400 mt-2">{t("رابط واحد لكل منطقة، يستخدمه كل المناديب، والمنطقة فيه ثابتة. كل تسجيل يظهر في قائمة التسجيل.", "One link per zone, used by all riders, zone fixed. Each registration appears in the list.")}</p>
     </Card>
   );
 }
