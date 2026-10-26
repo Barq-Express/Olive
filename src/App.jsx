@@ -3976,6 +3976,8 @@ function RegistrationModule({ db, save, user, onRefresh }) {
 
       {isManager && <IntakeLinkMaker zones={Array.from(new Set([...(db.areas || []), ...regAreas, ...db.riders.map((r) => r.area).filter(Boolean)].map((z) => String(z).trim()).filter(Boolean))).sort()} />}
 
+      {isManager && <SnoonuExport regs={regs} />}
+
       <Card className="p-4">
         <h3 className="font-bold text-slate-800 text-sm mb-2">{t("عدد الطلبات لكل موظف", "Requests per assignee")}</h3>
         <div className="flex flex-wrap gap-2">{agents.length === 0 ? <span className="text-sm text-slate-400">{t("لا يوجد موظفون مخوّلون — فعّلهم من نافذة الموظفين", "No authorized agents — enable them from Employees")}</span> : agents.map((s) => <span key={s.id} className="text-sm px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100"><b>{s.name}</b>: {perStaff[s.id] || 0}</span>)}</div>
@@ -4826,6 +4828,62 @@ function IntakeLinkMaker({ zones }) {
         </div>
       )}
       <p className="text-[11px] text-slate-400 mt-2">{t("كل رابط يُستخدم مرة واحدة، وتكون المنطقة فيه ثابتة.", "Each link works once and its zone is fixed.")}</p>
+    </Card>
+  );
+}
+
+// ===== تصدير المناديب الجاهزين لسنونو (Excel بروابط الصور، صالحة 7 أيام) =====
+const SNOONU_DOC_HEADERS = {
+  civilFront: "Civil ID (Front)", civilBack: "Civil ID (Back)",
+  licenseFront: "Driving License (Front)", licenseBack: "Driving License (Back)",
+  mulkiyaFront: "Car Mulkiya (Front)", mulkiyaBack: "Car Mulkiya (Back)",
+  personal: "Personal Picture",
+};
+
+function SnoonuExport({ regs }) {
+  const [busy, setBusy] = useState(false);
+  const ready = regs.filter((r) => regStatus(r) === "ready");
+  const run = async () => {
+    if (!ready.length || busy) return;
+    setBusy(true);
+    try {
+      const paths = [];
+      ready.forEach((r) => INTAKE_DOCS.forEach(([k]) => { if (r.docs && r.docs[k]) paths.push(r.docs[k]); }));
+      const urls = {};
+      if (paths.length) {
+        const { data, error } = await supabase.storage.from("rider-docs").createSignedUrls(paths, 315360000); // 10 سنوات تقريباً
+        if (error) throw error;
+        (data || []).forEach((x) => { if (x && x.signedUrl && x.path) urls[x.path] = x.signedUrl; });
+      }
+      const rows = ready.map((r) => {
+        const row = {
+          "3PL Company Name": "Olive",
+          "Contract Type": "Part Time",
+          "Plate Number": r.plate || "",
+          "Nationality": "Omani",
+          "Rider Name": r.fullName || "",
+          "Civil ID No": r.idNumber || "",
+          "Phone Number": r.phone || "",
+          "Vehicle Type": "Car",
+          "Zone": r.wilaya || "",
+          "Civil ID Expiration Date": r.civilExpiry || "",
+          "License Expiration Date": r.licenseExpiry || "",
+        };
+        INTAKE_DOCS.forEach(([k]) => { row[SNOONU_DOC_HEADERS[k]] = (r.docs && r.docs[k] && urls[r.docs[k]]) || ""; });
+        return row;
+      });
+      exportExcel(rows, "Snoonu_Riders_" + todayStr());
+    } catch (e) {
+      alert(t("تعذّر إنشاء التصدير، حاول مرة أخرى.", "Export failed, try again."));
+    } finally { setBusy(false); }
+  };
+  return (
+    <Card className="p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <h3 className="font-bold text-slate-800 text-sm">{t("تصدير لسنونو", "Export for Snoonu")}</h3>
+        <p className="text-[11px] text-slate-400">{t("المناديب بحالة «جاهز للتحويل»:", "Riders with status «Ready to convert»:")} <b>{ready.length}</b> · {t("روابط الصور دائمة (لا تنتهي)", "photo links never expire")}</p>
+      </div>
+      <Btn onClick={run} disabled={!ready.length || busy}>{busy ? t("جاري التجهيز...", "Preparing...") : t("تحميل Excel", "Download Excel")}</Btn>
     </Card>
   );
 }
