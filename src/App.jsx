@@ -4840,6 +4840,20 @@ const SNOONU_DOC_HEADERS = {
   personal: "Personal Picture",
 };
 
+// Excel لسنونو: خانات الصور تصير روابط قابلة للضغط (بدل نص الرابط الطويل)
+function exportSnoonuXlsx(rows, linkCols, name) {
+  const headers = Object.keys(rows[0] || {});
+  const ws = XLSX.utils.json_to_sheet(rows.map((r) => { const o = { ...r }; linkCols.forEach((c) => { if (o[c]) o[c] = "Open photo"; }); return o; }));
+  rows.forEach((r, i) => linkCols.forEach((c) => {
+    if (!r[c]) return;
+    const addr = XLSX.utils.encode_cell({ r: i + 1, c: headers.indexOf(c) });
+    ws[addr] = { t: "s", v: "Open photo", l: { Target: r[c], Tooltip: c } };
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Riders");
+  XLSX.writeFile(wb, `${name}.xlsx`);
+}
+
 function SnoonuExport({ regs, db, save }) {
   const [busy, setBusy] = useState(false);
   const [scope, setScope] = useState("new");
@@ -4881,7 +4895,7 @@ function SnoonuExport({ regs, db, save }) {
         INTAKE_DOCS.forEach(([k]) => { row[SNOONU_DOC_HEADERS[k]] = (r.docs && r.docs[k] && urls[r.docs[k]]) || ""; });
         return row;
       });
-      exportExcel(rows, "Snoonu_Riders_" + (zoneF === "all" ? "All" : zoneF) + "_" + todayStr());
+      exportSnoonuXlsx(rows, Object.values(SNOONU_DOC_HEADERS), "Snoonu_Riders_" + (zoneF === "all" ? "All" : zoneF) + "_" + todayStr());
       markSent(pick.map((r) => r.id));
     } catch (e) {
       alert(t("تعذّر إنشاء التصدير، حاول مرة أخرى.", "Export failed, try again."));
