@@ -2412,8 +2412,10 @@ function OperationsTab({ company, db }) {
   const latest = allDates.length ? allDates[allDates.length - 1] : todayStr();
   const [date, setDate] = useState(latest);
   const [area, setArea] = useState("all");
-  const [lbType, setLbType] = useState("Freelancer");
-  const [lbScope, setLbScope] = useState("day");
+  const [lbType, setLbType] = useState("all");
+  const [lbArea, setLbArea] = useState("all");
+  const [lbFrom, setLbFrom] = useState(latest);
+  const [lbTo, setLbTo] = useState(latest);
   const [hrScope, setHrScope] = useState("day");
   const [apType, setApType] = useState("all"); const [apNat, setApNat] = useState("all"); const [apVeh, setApVeh] = useState("all"); // فلاتر أداء المناطق
   const FULL_DAY = 8;
@@ -2437,13 +2439,23 @@ function OperationsTab({ company, db }) {
   const trend = allDates.slice(-14).map((d) => ({ d, o: sumBy(resultsOn(d), "orders") }));
   const trendMax = Math.max(1, ...trend.map((x) => x.o));
 
-  const lbRows = (() => {
-    if (lbScope === "day") return curRes.filter((r) => rIdx[r.riderId] && rIdx[r.riderId].type === lbType).map((r) => ({ rid: r.riderId, orders: Number(r.orders) || 0, hours: Math.min(Number(r.hours) || 0, HOURS_CAP), accept: r.accept, days: 1 }));
-    const agg = {};
-    allDates.forEach((d) => resultsOn(d).forEach((r) => { if (rIdx[r.riderId] && rIdx[r.riderId].type === lbType) { const g = agg[r.riderId] = agg[r.riderId] || { rid: r.riderId, orders: 0, hours: 0, days: 0 }; g.orders += Number(r.orders) || 0; g.hours += Math.min(Number(r.hours) || 0, HOURS_CAP); g.days += 1; } }));
-    return Object.values(agg);
-  })();
-  const lbSorted = lbRows.slice().sort((a, b) => b.orders - a.orders).slice(0, 15);
+  // المتصدّرون: فلترة بنطاق تاريخ (من - إلى) + منطقة + نوع المندوب، مرتّبين بالطلبات ثم الساعات
+  const lbSetRange = (from, to) => { setLbFrom(from); setLbTo(to); };
+  const lbAgg = {};
+  allDates.filter((d) => d >= lbFrom && d <= lbTo).forEach((d) => {
+    const im = imps.find((x) => x.date === d);
+    ((im && im.results) || []).forEach((r) => {
+      const rd = r.riderId && rIdx[r.riderId];
+      if (!rd) return;
+      if (lbType !== "all" && rd.type !== lbType) return;
+      if (lbArea !== "all" && (rd.area || "") !== lbArea) return;
+      const o = Number(r.orders) || 0, h = Math.min(Number(r.hours) || 0, HOURS_CAP);
+      if (o <= 0 && h <= 0) return;
+      const g = lbAgg[r.riderId] = lbAgg[r.riderId] || { rid: r.riderId, orders: 0, hours: 0, days: 0 };
+      g.orders += o; g.hours += h; g.days += 1;
+    });
+  });
+  const lbSorted = Object.values(lbAgg).sort((a, b) => b.orders - a.orders || b.hours - a.hours);
 
   const hrRows = (() => {
     if (hrScope === "day") return curRes.map((r) => ({ rid: r.riderId, hours: Math.min(Number(r.hours) || 0, HOURS_CAP), orders: Number(r.orders) || 0 }));
@@ -2527,19 +2539,30 @@ function OperationsTab({ company, db }) {
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-          <h3 className="font-bold text-slate-800">{t("المتصدّرون في الطلبات", "Top performers (orders)")}</h3>
-          <div className="flex gap-1">
-            {[["Freelancer", t("فريلانسر", "Freelancer")], ["Full Time", t("فول تايم", "Full Time")]].map(([k, l]) => (
+          <h3 className="font-bold text-slate-800">{t("المتصدّرون في الطلبات", "Top performers (orders)")} <span className="text-xs font-normal text-slate-400" dir="ltr">({lbFrom === lbTo ? lbFrom : lbFrom + " → " + lbTo})</span></h3>
+          <div className="flex gap-1 flex-wrap">
+            {[["all", t("الكل", "All")], ["Freelancer", t("فريلانسر", "Freelancer")], ["Full Time", t("فول تايم", "Full Time")]].map(([k, l]) => (
               <button key={k} onClick={() => setLbType(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={lbType === k ? { background: BRAND.orange, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
             ))}
-            <span className="w-2"></span>
-            {[["day", t("اليوم", "Day")], ["overall", t("الإجمالي", "Overall")]].map(([k, l]) => (
-              <button key={k} onClick={() => setLbScope(k)} className="px-3 py-1.5 text-xs font-semibold rounded-lg" style={lbScope === k ? { background: BRAND.navy, color: "#fff" } : { background: "#f1f5f9", color: "#475569" }}>{l}</button>
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap items-center mb-3">
+          <select value={lbFrom} onChange={(e) => setLbFrom(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs" dir="ltr">{allDates.map((d) => <option key={d} value={d}>{d}</option>)}{allDates.length === 0 && <option value={latest}>{latest}</option>}</select>
+          <span className="text-xs text-slate-400">{t("إلى", "to")}</span>
+          <select value={lbTo} onChange={(e) => setLbTo(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs" dir="ltr">{allDates.map((d) => <option key={d} value={d}>{d}</option>)}{allDates.length === 0 && <option value={latest}>{latest}</option>}</select>
+          <select value={lbArea} onChange={(e) => setLbArea(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"><option value="all">{t("كل المناطق", "All areas")}</option>{companyAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+          <div className="flex gap-1 flex-wrap">
+            {[
+              ["day", t("يوم واحد", "Single day"), () => lbSetRange(date, date)],
+              ["7d", t("آخر 7 أيام", "Last 7 days"), () => lbSetRange(allDates[Math.max(0, allDates.length - 7)] || latest, latest)],
+              ["all", t("كل الفترة", "All time"), () => lbSetRange(allDates[0] || latest, latest)],
+            ].map(([k, l, fn]) => (
+              <button key={k} onClick={fn} className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200">{l}</button>
             ))}
           </div>
         </div>
         <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
-          <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("الطلبات", "Orders"), t("الساعات", "Hours"), ...(lbScope === "overall" ? [t("أيام العمل", "Days")] : [])].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+          <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["#", tr("المندوب"), "ID", tr("المنطقة"), t("النوع", "Type"), t("الطلبات", "Orders"), t("الساعات", "Hours"), t("أيام العمل", "Days"), t("طلب/يوم", "Orders/day")].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {lbSorted.map((x, i) => (
               <tr key={x.rid} className="border-b border-slate-50" style={i < 3 ? { background: "#fffdf5" } : undefined}>
@@ -2547,12 +2570,14 @@ function OperationsTab({ company, db }) {
                 <td className="px-3 font-semibold text-slate-800">{rName(x.rid)}</td>
                 <td className="px-3 text-slate-500" dir="ltr">{rCid(x.rid)}</td>
                 <td className="px-3 text-slate-600">{rArea(x.rid)}</td>
+                <td className="px-3 text-slate-500">{rIdx[x.rid] && rIdx[x.rid].type === "Full Time" ? t("فول تايم", "Full Time") : t("فريلانسر", "Freelancer")}</td>
                 <td className="px-3 font-bold" style={{ color: BRAND.blue }}>{x.orders}</td>
                 <td className="px-3 text-slate-600">{Math.round(x.hours * 10) / 10}</td>
-                {lbScope === "overall" ? <td className="px-3 text-slate-500">{x.days}</td> : null}
+                <td className="px-3 text-slate-500">{x.days}</td>
+                <td className="px-3 text-slate-600">{Math.round((x.orders / x.days) * 10) / 10}</td>
               </tr>
             ))}
-            {lbSorted.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-slate-400">{t("لا توجد بيانات لهذا اليوم/النوع", "No data for this day/type")}</td></tr>}
+            {lbSorted.length === 0 && <tr><td colSpan={9} className="py-6 text-center text-slate-400">{t("لا توجد بيانات للفلتر المحدد", "No data for the selected filters")}</td></tr>}
           </tbody>
         </table></div>
       </Card>
