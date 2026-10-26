@@ -4815,17 +4815,18 @@ function IntakeLinkMaker({ zones }) {
     });
   };
   const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); } catch (e) { /* ignore */ } };
+  // نص الرسالة للمناديب بالعربي (ثابت)
   const msg = link ? [
-    t("مرحباً 👋", "Hello 👋"),
-    t("فريق Olive يدعوك للتسجيل كمندوب توصيل.", "The Olive team invites you to register as a delivery rider."),
-    t("سجّل من هذا الرابط، وارفع مستنداتك بنفسك:", "Register through this link and upload your documents yourself:"),
-    link,
+    "مرحباً 👋",
+    "يدعوكم فريق Olive للتسجيل كمندوب توصيل.",
+    "يرجى التسجيل من خلال الرابط التالي ورفع المستندات المطلوبة بأنفسكم:",
+    "🔗 " + link,
     "",
-    t("قبل ما تبدأ:", "Before you start:"),
-    t("• اكتب اسمك بالإنجليزي تماماً كما هو في البطاقة المدنية.", "• Write your name in English exactly as on your Civil ID."),
-    t("• جهّز صوراً واضحة للبطاقة المدنية والرخصة وملكية السيارة وصورة شخصية.", "• Prepare clear photos of your Civil ID, license, vehicle registration and a personal photo."),
+    "قبل البدء بالتسجيل:",
+    "• كتابة الاسم باللغة الإنجليزية تماماً كما هو مدوّن في البطاقة المدنية.",
+    "• تجهيز صور واضحة من البطاقة المدنية، ورخصة القيادة، وملكية المركبة، وصورة شخصية.",
     "",
-    t("نتمنى لك التوفيق 🌟", "Good luck 🌟"),
+    "تتمنى لكم Olive عملاً طيباً ورزقاً وفيراً 🌟",
   ].join("\n") : "";
   const copyMsg = () => { try { navigator.clipboard.writeText(msg); setCopied(true); } catch (e) { /* ignore */ } };
   return (
