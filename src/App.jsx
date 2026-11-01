@@ -4934,6 +4934,7 @@ function sidebarFor(user, db) {
   const regItem = { key: "registration", label: t("تسجيل المناديب", "Registration"), kind: "registration" };
   if (user.role === "Supervisor") {
     const items = [{ key: "company:" + user.company, label: cLabel(user.company), kind: "company", company: user.company }];
+    items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
     const myRecS = hrRecordFor(db, user);
     if (myRecS) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
     if (user.regAgent) items.push(regItem);
