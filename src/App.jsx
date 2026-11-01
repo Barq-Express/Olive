@@ -5,11 +5,11 @@ import {
   LayoutDashboard, Users, Truck, Wallet, FileBarChart, LogOut, Plus, Pencil,
   Search, Upload, CheckCircle2, XCircle, AlertTriangle, Banknote, Download,
   Printer, Eye, Menu, X, CircleUserRound, ShieldCheck, RefreshCw, FileText, Bike,
-  CalendarCheck, Building2, Clock, Phone, KeyRound, UserCog, MapPin, Settings, Globe, Trash2, UserPlus
+  CalendarCheck, Building2, Clock, Phone, KeyRound, UserCog, MapPin, Settings, Globe, Trash2, UserPlus, ClipboardList
 } from "lucide-react";
 
 /* ============================================================
-   Mr. Delivery — Operations System (v3)
+   Olive — Operations System (v3)
    Per-company windows · access scoping · Aramex · attendance
    6-way bank reconciliation
    ============================================================ */
@@ -3863,6 +3863,346 @@ function ArchiveWindow({ db, save, onRefresh }) {
   );
 }
 
+// ===================== نظام إدارة المهام (المرحلة 1) =====================
+const TASK_ST = { "New": ["جديدة", "New"], "In Progress": ["قيد التنفيذ", "In progress"], "Under Review": ["قيد المراجعة", "Under review"], "Completed": ["مكتملة", "Completed"], "Overdue": ["متأخرة", "Overdue"], "On Hold": ["معلّقة", "On hold"], "Cancelled": ["ملغاة", "Cancelled"] };
+const TASK_ST_COLOR = { "New": "#6b7280", "In Progress": "#2563eb", "Under Review": "#7c3aed", "Completed": "#0f9d58", "Overdue": "#c0341d", "On Hold": "#d97706", "Cancelled": "#94a3b8" };
+const TASK_PRI = { High: [t("عالية", "High"), "#c0341d"], Medium: [t("متوسطة", "Medium"), "#d97706"], Low: [t("منخفضة", "Low"), "#0f9d58"] };
+const TASK_DEPTS = ["عمليات", "مالية", "موارد بشرية", "تقنية", "مبيعات", "خدمة العملاء"];
+const taskFmt = (v) => (v ? new Date(v).toLocaleString(LANG === "en" ? "en-GB" : "ar-OM", { timeZone: "Asia/Muscat", dateStyle: "short", timeStyle: "short" }) : "—");
+const taskLocalInput = (v) => { if (!v) return ""; const d = new Date(v); const p = (n) => String(n).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()); };
+const taskIso = (v) => (v ? new Date(v).toISOString() : null);
+const taskRemain = (r) => {
+  if (r.status === "Completed" || r.status === "Cancelled" || !r.deadline_at) return "—";
+  const diff = new Date(r.deadline_at).getTime() - Date.now();
+  const hrs = Math.round(Math.abs(diff) / 36e5);
+  if (diff < 0) return t("متأخرة بـ " + hrs + " ساعة", "Overdue by " + hrs + "h");
+  return hrs >= 48 ? t(Math.round(hrs / 24) + " يوم متبقي", Math.round(hrs / 24) + " days left") : t(hrs + " ساعة متبقية", hrs + "h left");
+};
+const TaskBadge = ({ st }) => (
+  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: TASK_ST_COLOR[st] + "1a", color: TASK_ST_COLOR[st] }}>{TASK_ST[st] ? t(TASK_ST[st][0], TASK_ST[st][1]) : st}</span>
+);
+const TaskBar = ({ p, st }) => (
+  <div className="h-2 w-24 rounded bg-slate-100 overflow-hidden"><div className="h-2 rounded" style={{ width: (p || 0) + "%", background: TASK_ST_COLOR[st] || BRAND.blue }} /></div>
+);
+
+function TaskDetail({ id, me, db, onChanged }) {
+  const [d, setD] = useState(null);
+  const [body, setBody] = useState("");
+  const [prog, setProg] = useState(0);
+  const [edit, setEdit] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const load = () => supabase.rpc("task_get", { p_id: id }).then(({ data }) => {
+    setD(data || null);
+    if (data && data.task) {
+      setProg(data.task.progress || 0);
+      setEdit({ priority: data.task.priority, deadline_at: taskLocalInput(data.task.deadline_at), assignee_email: data.task.assignee_email, assignee_name: data.task.assignee_name || "", start_at: taskLocalInput(data.task.start_at) });
+    }
+  });
+  useEffect(() => { load(); }, [id]);
+  const run = (fn, okMsg) => {
+    setBusy(true); setMsg("");
+    fn().then(({ data, error }) => {
+      setBusy(false);
+      if (error || data === false) return setMsg(t("تعذّر الحفظ، حاول مرة أخرى.", "Could not save, try again."));
+      if (okMsg) setMsg(okMsg);
+      load(); onChanged && onChanged();
+    });
+  };
+  if (!d || !d.task) return <div className="text-sm text-slate-400 py-6 text-center">{t("جاري التحميل...", "Loading...")}</div>;
+  const k = d.task;
+  const mine = (k.assignee_email || "").toLowerCase() === (me.email || "").toLowerCase();
+  const adm = !!me.is_admin;
+  const setStatus = (s) => {
+    if (s === "Cancelled" && !window.confirm(t("إلغاء هذه المهمة؟", "Cancel this task?"))) return;
+    run(() => supabase.rpc("task_update", { p_id: id, p_data: { status: s } }));
+  };
+  const saveProgress = () => run(() => supabase.rpc("task_update", { p_id: id, p_data: { progress: Number(prog) } }), t("✅ تم تحديث النسبة", "✅ Progress updated"));
+  const saveAdmin = () => run(() => supabase.rpc("task_update", { p_id: id, p_data: {
+    priority: edit.priority, deadline_at: taskIso(edit.deadline_at), start_at: taskIso(edit.start_at),
+    assignee_email: edit.assignee_email, assignee_name: edit.assignee_name,
+  } }), t("✅ تم حفظ التعديلات", "✅ Saved"));
+  const addComment = () => { const b = body.trim(); if (!b) return; setBody(""); run(() => supabase.rpc("task_comment", { p_id: id, p_body: b })); };
+  const upFile = (file) => {
+    if (!file) return;
+    setBusy(true); setMsg("");
+    const safe = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
+    const path = id + "/" + Date.now() + "-" + safe;
+    supabase.storage.from("task-files").upload(path, file, { upsert: false, contentType: file.type || "application/octet-stream" }).then(({ error }) => {
+      if (error) { setBusy(false); return setMsg(t("تعذّر رفع الملف، حاول مرة أخرى.", "File upload failed, try again.")); }
+      return supabase.rpc("task_file_add", { p_id: id, p_name: file.name, p_path: path }).then(() => { setBusy(false); load(); onChanged && onChanged(); });
+    });
+  };
+  const openFile = (path) => supabase.storage.from("task-files").createSignedUrl(path, 3600).then(({ data }) => { if (data && data.signedUrl) window.open(data.signedUrl, "_blank", "noopener"); });
+  const btn = (label, onClick, color) => (
+    <button onClick={onClick} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ background: color }}>{label}</button>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-400" dir="ltr">{k.code}</span>
+        <TaskBadge st={k.status} />
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: TASK_PRI[k.priority][1] + "1a", color: TASK_PRI[k.priority][1] }}>{TASK_PRI[k.priority][0]}</span>
+      </div>
+      <div>
+        <h3 className="font-extrabold text-slate-800 text-lg">{k.title}</h3>
+        {k.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-line">{k.description}</p>}
+        {k.instructions && <div className="mt-2 rounded-lg bg-slate-50 border border-slate-100 p-3 text-sm text-slate-700 whitespace-pre-line"><b>{t("تعليمات:", "Instructions:")}</b> {k.instructions}</div>}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+        <div><span className="text-slate-400 text-xs">{t("الموظف", "Assignee")}</span><div>{k.assignee_name || k.assignee_email}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("القسم", "Department")}</span><div>{k.department || "—"}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("المشروع", "Project")}</span><div>{k.project || "—"}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("البداية", "Start")}</span><div dir="ltr">{taskFmt(k.start_at)}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("الموعد النهائي", "Deadline")}</span><div dir="ltr">{taskFmt(k.deadline_at)}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("المتبقي", "Remaining")}</span><div>{taskRemain(k)}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("أنشأها", "Created by")}</span><div dir="ltr">{k.created_by}</div></div>
+      </div>
+
+      <div className="rounded-xl border border-slate-100 p-3 space-y-3">
+        <div className="flex items-center justify-between"><span className="font-bold text-sm text-slate-800">{t("النسبة", "Progress")}: {k.progress}%</span><TaskBar p={k.progress} st={k.status} /></div>
+        {(mine || adm) && k.status !== "Completed" && k.status !== "Cancelled" && (
+          <div className="flex items-center gap-3">
+            <input type="range" min="0" max="100" step="5" value={prog} onChange={(e) => setProg(e.target.value)} className="flex-1" />
+            {btn(t("حفظ", "Save"), saveProgress, BRAND.navy)}
+          </div>
+        )}
+        {(mine || adm) && (
+          <div className="flex gap-2 flex-wrap">
+            {mine && !adm && k.status !== "Under Review" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("بدء العمل", "Start"), () => setStatus("In Progress"), "#2563eb")}
+            {mine && !adm && k.status !== "Under Review" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("إرسال للمراجعة", "Submit for review"), () => setStatus("Under Review"), "#7c3aed")}
+            {adm && k.status !== "Completed" && btn(t("اعتماد كمكتملة", "Approve as completed"), () => setStatus("Completed"), "#0f9d58")}
+            {adm && k.status === "Under Review" && btn(t("إعادة للعمل", "Send back"), () => setStatus("In Progress"), "#2563eb")}
+            {adm && k.status !== "On Hold" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("تعليق", "Hold"), () => setStatus("On Hold"), "#d97706")}
+            {adm && k.status !== "Cancelled" && k.status !== "Completed" && btn(t("إلغاء", "Cancel"), () => setStatus("Cancelled"), "#c0341d")}
+          </div>
+        )}
+      </div>
+
+      {adm && (
+        <div className="rounded-xl border border-slate-100 p-3 space-y-3">
+          <div className="font-bold text-sm text-slate-800">{t("تعديل (للمدير)", "Edit (admin)")}</div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <Field label={t("الموظف", "Assignee")}><select className={inputCls} value={edit.assignee_email || ""} onChange={(e) => { const s = (db.staff || {})[e.target.value]; setEdit({ ...edit, assignee_email: e.target.value, assignee_name: (s && s.name) || e.target.value }); }}>{Object.entries(db.staff || {}).map(([em, p]) => <option key={em} value={em}>{(p && p.name) || em}</option>)}{!(db.staff || {})[edit.assignee_email] && edit.assignee_email && <option value={edit.assignee_email}>{edit.assignee_email}</option>}</select></Field>
+            <Field label={t("الأولوية", "Priority")}><select className={inputCls} value={edit.priority || "Medium"} onChange={(e) => setEdit({ ...edit, priority: e.target.value })}>{Object.keys(TASK_PRI).map((p) => <option key={p} value={p}>{TASK_PRI[p][0]}</option>)}</select></Field>
+            <Field label={t("البداية", "Start")}><input type="datetime-local" className={inputCls} dir="ltr" value={edit.start_at || ""} onChange={(e) => setEdit({ ...edit, start_at: e.target.value })} /></Field>
+            <Field label={t("الموعد النهائي", "Deadline")}><input type="datetime-local" className={inputCls} dir="ltr" value={edit.deadline_at || ""} onChange={(e) => setEdit({ ...edit, deadline_at: e.target.value })} /></Field>
+          </div>
+          {btn(t("حفظ التعديلات", "Save changes"), saveAdmin, BRAND.navy)}
+        </div>
+      )}
+
+      <div>
+        <div className="font-bold text-sm text-slate-800 mb-2">{t("المرفقات", "Attachments")}</div>
+        <div className="space-y-1 mb-2">
+          {d.files.length === 0 && <div className="text-xs text-slate-400">{t("لا توجد ملفات", "No files")}</div>}
+          {d.files.map((f) => <button key={f.id} onClick={() => openFile(f.path)} className="block text-xs text-start text-blue-700 underline">📎 {f.name} <span className="text-slate-400">· {taskFmt(f.at)}</span></button>)}
+        </div>
+        {(mine || adm) && <input type="file" accept="image/*,application/pdf" disabled={busy} onChange={(e) => upFile(e.target.files && e.target.files[0])} className="text-xs" />}
+      </div>
+
+      <div>
+        <div className="font-bold text-sm text-slate-800 mb-2">{t("التعليقات والتحديثات", "Comments & updates")}</div>
+        <div className="space-y-2 mb-2 max-h-56 overflow-auto">
+          {d.comments.length === 0 && <div className="text-xs text-slate-400">{t("لا توجد تعليقات", "No comments")}</div>}
+          {d.comments.map((c) => (
+            <div key={c.id} className="rounded-lg bg-slate-50 p-2"><div className="text-[11px] text-slate-400" dir="ltr">{c.by_email} · {taskFmt(c.at)}</div><div className="text-sm text-slate-700 whitespace-pre-line">{c.body}</div></div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input className={inputCls} value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("اكتب تعليقاً...", "Write a comment...")} />
+          {btn(t("إرسال", "Send"), addComment, BRAND.navy)}
+        </div>
+      </div>
+
+      <div>
+        <div className="font-bold text-sm text-slate-800 mb-2">{t("سجل النشاط", "Activity log")}</div>
+        <div className="space-y-1 max-h-56 overflow-auto text-xs">
+          {d.events.map((e) => (
+            <div key={e.id} className="flex gap-2 py-1 border-b border-slate-50"><span className="text-slate-400 whitespace-nowrap" dir="ltr">{taskFmt(e.at)}</span><span className="text-slate-500 whitespace-nowrap" dir="ltr">{e.by_email}</span><span className="text-slate-700">{e.detail}</span></div>
+          ))}
+        </div>
+      </div>
+
+      {msg && <div className="text-sm" style={{ color: msg.startsWith("✅") ? "#0f9d58" : "#c0341d" }}>{msg}</div>}
+    </div>
+  );
+}
+
+function TasksModule({ db, mode }) {
+  const [me, setMe] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [q, setQ] = useState(""); const [stF, setStF] = useState("all"); const [prF, setPrF] = useState("all");
+  const [deptF, setDeptF] = useState("all"); const [asF, setAsF] = useState("all"); const [fromF, setFromF] = useState(""); const [toF, setToF] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [sel, setSel] = useState(null);
+  const blankNew = { title: "", description: "", instructions: "", assignee_email: "", department: "", project: "", priority: "Medium", start_at: "", deadline_at: "" };
+  const [nf, setNf] = useState(blankNew);
+  const [createErr, setCreateErr] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const load = () => {
+    setLoading(true); setErr("");
+    supabase.rpc("task_me").then(({ data: m, error: e1 }) => {
+      if (e1) { setLoading(false); return setErr(e1.message); }
+      setMe(m || { email: "", is_admin: false });
+      return supabase.rpc("task_list").then(({ data, error }) => {
+        setLoading(false);
+        if (error) return setErr(error.message);
+        setRows(Array.isArray(data) ? data : []);
+      });
+    });
+  };
+  useEffect(() => { load(); }, [mode]);
+
+  if (!me && loading) return <div className="text-sm text-slate-400 py-10 text-center">{t("جاري التحميل...", "Loading...")}</div>;
+  if (mode === "tasks" && me && !me.is_admin) return <Card className="p-6 text-center text-sm text-slate-500">{t("هذه الصفحة للمدراء فقط.", "This page is for admins only.")}</Card>;
+
+  const adm = !!(me && me.is_admin);
+  const isAdminView = mode === "tasks";
+  const scoped = rows.filter((r) => (isAdminView ? true : (me && r.assignee_email === me.email)));
+  const cnt = (s) => scoped.filter((r) => r.effective_status === s).length;
+  const doneN = cnt("Completed"), cancN = cnt("Cancelled");
+  const stats = { total: scoped.length, new: cnt("New"), inprog: cnt("In Progress"), review: cnt("Under Review"), done: doneN, overdue: cnt("Overdue"), hold: cnt("On Hold"), pending: scoped.length - doneN - cancN };
+  const staffOpts = Object.entries(db.staff || {});
+  const depts = Array.from(new Set([...TASK_DEPTS, ...scoped.map((r) => r.department).filter(Boolean)])).sort();
+  const list = scoped.filter((r) => (
+    (!q || (r.title + " " + r.code + " " + (r.assignee_name || "") + " " + (r.assignee_email || "")).toLowerCase().includes(q.toLowerCase())) &&
+    (stF === "all" || r.effective_status === stF) &&
+    (prF === "all" || r.priority === prF) &&
+    (deptF === "all" || (r.department || "") === deptF) &&
+    (asF === "all" || r.assignee_email === asF) &&
+    (!fromF || (r.start_at || "").slice(0, 10) >= fromF) &&
+    (!toF || (r.deadline_at || "").slice(0, 10) <= toF)
+  ));
+
+  const create = () => {
+    if (!nf.title.trim()) return setCreateErr(t("عنوان المهمة مطلوب", "Title is required"));
+    if (!nf.assignee_email) return setCreateErr(t("اختر الموظف", "Choose an assignee"));
+    if (!nf.deadline_at) return setCreateErr(t("حدد الموعد النهائي", "Set a deadline"));
+    if (nf.start_at && new Date(nf.deadline_at) <= new Date(nf.start_at)) return setCreateErr(t("الموعد النهائي لازم يكون بعد البداية", "Deadline must be after start"));
+    const s = (db.staff || {})[nf.assignee_email];
+    setCreating(true); setCreateErr("");
+    supabase.rpc("task_create", { p_data: { ...nf, assignee_name: (s && s.name) || nf.assignee_email, start_at: taskIso(nf.start_at), deadline_at: taskIso(nf.deadline_at) } }).then(({ data, error }) => {
+      setCreating(false);
+      if (error || !data) return setCreateErr(t("تعذّر إنشاء المهمة", "Could not create the task"));
+      setShowCreate(false); setNf(blankNew); load();
+    });
+  };
+
+  const kpi = (label, value, color) => (
+    <div className="rounded-xl p-3 border border-slate-100 bg-white"><div className="text-xs text-slate-500">{label}</div><div className="text-2xl font-extrabold" style={{ color: color || "#0C1B33" }}>{value}</div></div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2"><span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.navy }}><ClipboardList size={18} color="#fff" /></span><h2 className="font-extrabold text-lg text-slate-800">{isAdminView ? t("إدارة المهام", "Task Management") : t("مهامي", "My Tasks")}</h2></div>
+        {isAdminView && adm && <Btn onClick={() => setShowCreate(true)}><Plus size={15} /> {t("مهمة جديدة", "New task")}</Btn>}
+      </div>
+
+      {err && <Card className="p-4 text-sm text-red-600">{err}</Card>}
+
+      <div className={"grid gap-2 " + (isAdminView ? "grid-cols-2 md:grid-cols-4 lg:grid-cols-7" : "grid-cols-2 md:grid-cols-4")}>
+        {kpi(t("الإجمالي", "Total"), stats.total)}
+        {isAdminView ? kpi(t("جديدة", "New"), stats.new, TASK_ST_COLOR["New"]) : kpi(t("المعلّقة", "Pending"), stats.pending, TASK_ST_COLOR["In Progress"])}
+        {isAdminView ? kpi(t("قيد التنفيذ", "In progress"), stats.inprog, TASK_ST_COLOR["In Progress"]) : kpi(t("مكتملة", "Completed"), stats.done, TASK_ST_COLOR["Completed"])}
+        {isAdminView ? kpi(t("قيد المراجعة", "Under review"), stats.review, TASK_ST_COLOR["Under Review"]) : kpi(t("متأخرة", "Overdue"), stats.overdue, TASK_ST_COLOR["Overdue"])}
+        {isAdminView && kpi(t("مكتملة", "Completed"), stats.done, TASK_ST_COLOR["Completed"])}
+        {isAdminView && kpi(t("متأخرة", "Overdue"), stats.overdue, TASK_ST_COLOR["Overdue"])}
+        {isAdminView && kpi(t("معلّقة", "On hold"), stats.hold, TASK_ST_COLOR["On Hold"])}
+      </div>
+
+      <Card className="p-3">
+        <div className="flex gap-2 flex-wrap items-end">
+          <input className={inputCls + " max-w-xs"} placeholder={t("بحث...", "Search...")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className={inputCls + " max-w-[10rem]"} value={stF} onChange={(e) => setStF(e.target.value)}><option value="all">{t("كل الحالات", "All statuses")}</option>{Object.keys(TASK_ST).map((s) => <option key={s} value={s}>{t(TASK_ST[s][0], TASK_ST[s][1])}</option>)}</select>
+          <select className={inputCls + " max-w-[10rem]"} value={prF} onChange={(e) => setPrF(e.target.value)}><option value="all">{t("كل الأولويات", "All priorities")}</option>{Object.keys(TASK_PRI).map((p) => <option key={p} value={p}>{TASK_PRI[p][0]}</option>)}</select>
+          {isAdminView && <select className={inputCls + " max-w-[10rem]"} value={deptF} onChange={(e) => setDeptF(e.target.value)}><option value="all">{t("كل الأقسام", "All departments")}</option>{depts.map((d) => <option key={d} value={d}>{d}</option>)}</select>}
+          {isAdminView && <select className={inputCls + " max-w-[12rem]"} value={asF} onChange={(e) => setAsF(e.target.value)}><option value="all">{t("كل الموظفين", "All employees")}</option>{staffOpts.map(([em, p]) => <option key={em} value={em}>{(p && p.name) || em}</option>)}</select>}
+          <Field label={t("البداية من", "Start from")}><input type="date" className={inputCls} value={fromF} onChange={(e) => setFromF(e.target.value)} /></Field>
+          <Field label={t("الموعد حتى", "Deadline until")}><input type="date" className={inputCls} value={toF} onChange={(e) => setToF(e.target.value)} /></Field>
+        </div>
+      </Card>
+
+      {loading ? <div className="text-sm text-slate-400 text-center py-8">{t("جاري التحميل...", "Loading...")}</div> : (
+        isAdminView ? (
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
+              <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{["ID", t("العنوان", "Title"), t("الموظف", "Assignee"), t("القسم", "Dept"), t("الأولوية", "Priority"), t("البداية", "Start"), t("الموعد", "Deadline"), t("الحالة", "Status"), t("النسبة", "Progress"), t("أنشأها", "Created by"), ""].map((h, i) => <th key={i} className="py-2 px-3 font-semibold">{h}</th>)}</tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="py-2 px-3 text-slate-500" dir="ltr">{r.code}</td>
+                    <td className="px-3 font-semibold text-slate-800">{r.title}</td>
+                    <td className="px-3 text-slate-600">{r.assignee_name || r.assignee_email}</td>
+                    <td className="px-3 text-slate-600">{r.department || "—"}</td>
+                    <td className="px-3 font-semibold" style={{ color: TASK_PRI[r.priority][1] }}>{TASK_PRI[r.priority][0]}</td>
+                    <td className="px-3 text-slate-500" dir="ltr">{taskFmt(r.start_at)}</td>
+                    <td className="px-3 text-slate-500" dir="ltr">{taskFmt(r.deadline_at)}</td>
+                    <td className="px-3"><TaskBadge st={r.effective_status} /></td>
+                    <td className="px-3"><div className="flex items-center gap-2"><TaskBar p={r.progress} st={r.effective_status} /><span className="text-xs text-slate-500">{r.progress}%</span></div></td>
+                    <td className="px-3 text-slate-500" dir="ltr">{r.created_by}</td>
+                    <td className="px-3"><button onClick={() => setSel(r.id)} className="text-xs font-semibold" style={{ color: BRAND.blue }}>{t("عرض", "View")}</button></td>
+                  </tr>
+                ))}
+                {list.length === 0 && <tr><td colSpan={11} className="py-6 text-center text-slate-400">{t("لا توجد مهام", "No tasks")}</td></tr>}
+              </tbody>
+            </table></div>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {list.length === 0 && <Card className="p-6 text-center text-sm text-slate-400">{t("ما عندك مهام حالياً 👍", "No tasks for you right now 👍")}</Card>}
+            {list.map((r) => (
+              <Card key={r.id} className="p-4 cursor-pointer hover:shadow-sm" style={{ borderRight: "4px solid " + TASK_ST_COLOR[r.effective_status] }}>
+                <button onClick={() => setSel(r.id)} className="w-full text-start">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-bold text-slate-800">{r.title}</span>
+                    <TaskBadge st={r.effective_status} />
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 flex-wrap">
+                    <span style={{ color: TASK_PRI[r.priority][1] }} className="font-semibold">{TASK_PRI[r.priority][0]}</span>
+                    <span dir="ltr">{t("الموعد:", "Due:")} {taskFmt(r.deadline_at)}</span>
+                    <span>{taskRemain(r)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2"><TaskBar p={r.progress} st={r.effective_status} /><span className="text-xs text-slate-500">{r.progress}%</span></div>
+                </button>
+              </Card>
+            ))}
+          </div>
+        )
+      )}
+
+      <Modal open={!!sel} onClose={() => { setSel(null); load(); }} title={t("تفاصيل المهمة", "Task details")} wide>
+        {sel && me && <TaskDetail id={sel} me={me} db={db} onChanged={load} />}
+      </Modal>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t("مهمة جديدة", "New task")} wide>
+        <div className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <Field label={t("عنوان المهمة *", "Task title *")}><input className={inputCls} value={nf.title} onChange={(e) => setNf({ ...nf, title: e.target.value })} /></Field>
+            <Field label={t("الموظف *", "Assignee *")}><select className={inputCls} value={nf.assignee_email} onChange={(e) => setNf({ ...nf, assignee_email: e.target.value })}><option value="">{t("— اختر —", "— select —")}</option>{staffOpts.map(([em, p]) => <option key={em} value={em}>{(p && p.name) || em}</option>)}</select></Field>
+            <Field label={t("القسم", "Department")}><input className={inputCls} list="task-depts" value={nf.department} onChange={(e) => setNf({ ...nf, department: e.target.value })} /><datalist id="task-depts">{TASK_DEPTS.map((d) => <option key={d} value={d} />)}</datalist></Field>
+            <Field label={t("المشروع (اختياري)", "Project (optional)")}><input className={inputCls} value={nf.project} onChange={(e) => setNf({ ...nf, project: e.target.value })} /></Field>
+            <Field label={t("الأولوية", "Priority")}><select className={inputCls} value={nf.priority} onChange={(e) => setNf({ ...nf, priority: e.target.value })}>{Object.keys(TASK_PRI).map((p) => <option key={p} value={p}>{TASK_PRI[p][0]}</option>)}</select></Field>
+            <div />
+            <Field label={t("تاريخ ووقت البداية", "Start date & time")}><input type="datetime-local" className={inputCls} dir="ltr" value={nf.start_at} onChange={(e) => setNf({ ...nf, start_at: e.target.value })} /></Field>
+            <Field label={t("الموعد النهائي *", "Deadline *")}><input type="datetime-local" className={inputCls} dir="ltr" value={nf.deadline_at} onChange={(e) => setNf({ ...nf, deadline_at: e.target.value })} /></Field>
+          </div>
+          <Field label={t("الوصف", "Description")}><textarea rows={3} className={inputCls} value={nf.description} onChange={(e) => setNf({ ...nf, description: e.target.value })} /></Field>
+          <Field label={t("تعليمات إضافية", "Additional instructions")}><textarea rows={3} className={inputCls} value={nf.instructions} onChange={(e) => setNf({ ...nf, instructions: e.target.value })} /></Field>
+          <p className="text-[11px] text-slate-400">{t("المرفقات تضيفها بعد إنشاء المهمة من صفحة التفاصيل.", "Attachments can be added from the task details after creation.")}</p>
+          {createErr && <div className="text-sm text-red-600">{createErr}</div>}
+          <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setShowCreate(false)}>{t("إلغاء", "Cancel")}</Btn><Btn onClick={create}>{creating ? t("جاري الحفظ...", "Saving...") : t("إنشاء المهمة", "Create task")}</Btn></div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 function RegistrationModule({ db, save, user, onRefresh }) {
   const regs = db.registrations || [];
   // authorized agents = staff accounts flagged regAgent; fallback to legacy regStaff names
@@ -4600,6 +4940,8 @@ function sidebarFor(user, db) {
     return items;
   }
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
+  items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
+  if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "tasks", label: t("إدارة المهام", "Task Management"), kind: "tasks" });
   const myRec = hrRecordFor(db, user);
   if (myRec) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
   COMPANIES.forEach((c) => items.push({ key: "company:" + c, label: cLabel(c), kind: "company", company: c }));
@@ -4618,7 +4960,7 @@ function sidebarFor(user, db) {
   }
   return items;
 }
-const ICON_FOR = { dashboard: LayoutDashboard, company: Building2, allriders: Users, reports: FileBarChart, shifts: Clock, employees: UserCog, registration: UserPlus, areas: MapPin, banks: Banknote, hr: Users, myhr: CalendarCheck, archive: Trash2 };
+const ICON_FOR = { dashboard: LayoutDashboard, company: Building2, allriders: Users, reports: FileBarChart, shifts: Clock, employees: UserCog, registration: UserPlus, areas: MapPin, banks: Banknote, hr: Users, myhr: CalendarCheck, archive: Trash2, tasks: ClipboardList, mytasks: ClipboardList };
 
 const REG_LINK_FOR = { "Snoonu": "snoonu-tDKVbKhZ", "Talabat": "talabat-BhM5lYFt", "Aramex": "aramex-f_i83gxJ" };
 const REG_LINKS = { "snoonu-tDKVbKhZ": "Snoonu", "talabat-BhM5lYFt": "Talabat", "aramex-f_i83gxJ": "Aramex" };
@@ -5253,6 +5595,7 @@ export default function App() {
     if (activeItem.kind === "employees") return <Employees db={db} save={save} user={user} />;
     if (activeItem.kind === "hr" && user.role === "Admin") return <HRWindow db={db} save={save} />;
     if (activeItem.kind === "myhr") return <MyHRView db={db} save={save} user={user} />;
+    if (activeItem.kind === "tasks" || activeItem.kind === "mytasks") return <TasksModule db={db} mode={activeItem.kind} />;
     if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} />;
     if (activeItem.kind === "areas") return <AreasWindow db={db} save={save} />;
     if (activeItem.kind === "banks") return <BanksWindow db={db} save={save} />;
