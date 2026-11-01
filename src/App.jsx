@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Truck, Wallet, FileBarChart, LogOut, Plus, Pencil,
   Search, Upload, CheckCircle2, XCircle, AlertTriangle, Banknote, Download,
   Printer, Eye, Menu, X, CircleUserRound, ShieldCheck, RefreshCw, FileText, Bike,
-  CalendarCheck, Building2, Clock, Phone, KeyRound, UserCog, MapPin, Settings, Globe, Trash2, UserPlus, ClipboardList
+  CalendarCheck, Building2, Clock, Phone, KeyRound, UserCog, MapPin, Settings, Globe, Trash2, UserPlus, ClipboardList, Bell
 } from "lucide-react";
 
 /* ============================================================
@@ -3962,16 +3962,15 @@ function TaskDetail({ id, me, db, onChanged }) {
 
       <div className="rounded-xl border border-slate-100 p-3 space-y-3">
         <div className="flex items-center justify-between"><span className="font-bold text-sm text-slate-800">{t("النسبة", "Progress")}: {k.progress}%</span><TaskBar p={k.progress} st={k.status} /></div>
-        {(mine || adm) && k.status !== "Completed" && k.status !== "Cancelled" && (
+        {(adm || (mine && k.progress < 100)) && k.status !== "Completed" && k.status !== "Cancelled" && (
           <div className="flex items-center gap-3">
-            <input type="range" min="0" max="100" step="5" value={prog} onChange={(e) => setProg(e.target.value)} className="flex-1" />
+            <input type="range" min={adm ? 0 : k.progress} max="100" step="5" value={prog} onChange={(e) => setProg(e.target.value)} className="flex-1" />
             {btn(t("حفظ", "Save"), saveProgress, BRAND.navy)}
           </div>
         )}
         {(mine || adm) && (
           <div className="flex gap-2 flex-wrap">
             {mine && !adm && k.status !== "Under Review" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("بدء العمل", "Start"), () => setStatus("In Progress"), "#2563eb")}
-            {mine && !adm && k.status !== "Under Review" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("إرسال للمراجعة", "Submit for review"), () => setStatus("Under Review"), "#7c3aed")}
             {adm && k.status !== "Completed" && btn(t("اعتماد كمكتملة", "Approve as completed"), () => setStatus("Completed"), "#0f9d58")}
             {adm && k.status === "Under Review" && btn(t("إعادة للعمل", "Send back"), () => setStatus("In Progress"), "#2563eb")}
             {adm && k.status !== "On Hold" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("تعليق", "Hold"), () => setStatus("On Hold"), "#d97706")}
@@ -5735,6 +5734,38 @@ export default function App() {
   );
 }
 
+// جرس الإشعارات (المرحلة 2): يحدّث كل دقيقة ويعرض عدد غير المقروء
+function NotifBell() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState({ unread: 0, items: [] });
+  const load = () => supabase.rpc("task_notif_list").then(({ data: d }) => { if (d) setData({ unread: d.unread || 0, items: d.items || [] }); }).catch(() => {});
+  useEffect(() => { load(); const id = setInterval(load, 60000); return () => clearInterval(id); }, []);
+  const markAll = () => supabase.rpc("task_notif_read_all").then(load);
+  const markOne = (n) => { if (!n.read_at) supabase.rpc("task_notif_read", { p_id: n.id }).then(load); };
+  const toggle = () => { setOpen(!open); if (!open) load(); };
+  return (
+    <div className="relative">
+      <button onClick={toggle} className="relative text-slate-500 hover:text-slate-800" title={t("الإشعارات", "Notifications")}>
+        <Bell size={20} />
+        {data.unread > 0 && <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center" style={{ background: "#c0341d" }}>{data.unread > 9 ? "9+" : data.unread}</span>}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-10 w-80 max-h-96 overflow-auto bg-white rounded-xl shadow-lg border border-slate-200 z-50" dir={dirOf()}>
+          <div className="flex items-center justify-between p-3 border-b border-slate-100"><b className="text-sm text-slate-800">{t("الإشعارات", "Notifications")}</b>{data.unread > 0 && <button onClick={markAll} className="text-xs font-semibold text-blue-700">{t("تحديد الكل كمقروء", "Mark all read")}</button>}</div>
+          {data.items.length === 0 && <div className="p-4 text-sm text-slate-400 text-center">{t("لا توجد إشعارات", "No notifications")}</div>}
+          {data.items.map((n) => (
+            <button key={n.id} onClick={() => markOne(n)} className="w-full text-start p-3 border-b border-slate-50 hover:bg-slate-50" style={{ background: n.read_at ? "#fff" : "#f0f7ff" }}>
+              <div className="text-sm font-bold text-slate-800">{n.title}</div>
+              <div className="text-xs text-slate-600">{n.body}</div>
+              <div className="text-[10px] text-slate-400 mt-1" dir="ltr">{new Date(n.created_at).toLocaleString("en-GB", { timeZone: "Asia/Muscat", dateStyle: "short", timeStyle: "short" })}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Topbar({ user, onLogout, onMenu, title, logo, onSettings, onToggleLang, onRefresh }) {
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 sticky top-0 z-20">
@@ -5750,6 +5781,7 @@ function Topbar({ user, onLogout, onMenu, title, logo, onSettings, onToggleLang,
         </div>
         {onRefresh && <button onClick={onRefresh} title={t("تحديث البيانات", "Refresh")} className="text-slate-500 hover:text-slate-800"><RefreshCw size={18} /></button>}
         {onToggleLang && <button onClick={onToggleLang} className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg px-2 py-1" title="Language"><Globe size={14} /> {t("EN", "ع")}</button>}
+        {user.role !== "Rider" && <NotifBell />}
         <span className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><CircleUserRound size={22} /></span>
         {onSettings && <button onClick={onSettings} className="text-slate-400 hover:text-slate-700" title={tr("الإعدادات")}><Settings size={20} /></button>}
         <button onClick={onLogout} className="text-slate-400 hover:text-red-600" title={tr("خروج")}><LogOut size={20} /></button>
