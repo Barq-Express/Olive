@@ -5750,7 +5750,7 @@ function NotifBell() {
         {data.unread > 0 && <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center" style={{ background: "#c0341d" }}>{data.unread > 9 ? "9+" : data.unread}</span>}
       </button>
       {open && (
-        <div className="absolute left-0 top-10 w-80 max-h-96 overflow-auto bg-white rounded-xl shadow-lg border border-slate-200 z-50" dir={dirOf()}>
+        <div className="absolute right-0 top-10 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-auto bg-white rounded-xl shadow-lg border border-slate-200 z-50" dir={dirOf()}>
           <div className="flex items-center justify-between p-3 border-b border-slate-100"><b className="text-sm text-slate-800">{t("الإشعارات", "Notifications")}</b>{data.unread > 0 && <button onClick={markAll} className="text-xs font-semibold text-blue-700">{t("تحديد الكل كمقروء", "Mark all read")}</button>}</div>
           {data.items.length === 0 && <div className="p-4 text-sm text-slate-400 text-center">{t("لا توجد إشعارات", "No notifications")}</div>}
           {data.items.map((n) => (
