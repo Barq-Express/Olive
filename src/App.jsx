@@ -473,6 +473,7 @@ function normalizeDB(db) {
     excuses: db.excuses || {},
     customBanks: db.customBanks || [],
     codWindow: db.codWindow || { enabled: true, start: "00:00", end: "15:00" }, // نافذة رفع التحويلات (توقيت عمان)
+    visibleFrom: db.visibleFrom || "", // المناديب يشوفون التقارير والـ COD من هذا التاريخ فقط (فاضي = الكل)
     codAdjustments: db.codAdjustments || [],
     codDeductions: db.codDeductions || [], // خصومات COD من الراتب (نظام شهري)
     payNowOnly: db.payNowOnly,
@@ -5294,6 +5295,16 @@ export default function App() {
           <Field label={tr("تأكيد كلمة المرور")}><input type="password" className={inputCls} value={spw.cf} onChange={(e) => setSpw({ ...spw, cf: e.target.value })} /></Field>
           {spwMsg && <p className="text-xs" style={{ color: spwMsg.charAt(0) === "\u2705" ? "#0f9d58" : "#c0341d" }}>{spwMsg}</p>}
           <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setShowSettings(false)}>{tr("إغلاق")}</Btn><Btn onClick={changeStaffPw}>{tr("حفظ")}</Btn></div>
+          {user.role === "Admin" && (
+            <div className="border-t border-slate-100 pt-4 mt-2">
+              <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1">📅 {t("ظهور التقارير والـ COD للمناديب", "Riders' reports & COD start date")}</h4>
+              <p className="text-xs text-slate-500 mb-3">{t("المندوب يشوف التقارير والـ COD من هذا التاريخ فقط. البيانات القديمة تبقى محفوظة عندك.", "Riders only see reports and COD from this date. Older data stays with admin.")}</p>
+              <div className="flex gap-2 items-end flex-wrap">
+                <Field label={t("من تاريخ", "From date")}><input type="date" className={inputCls} dir="ltr" value={db.visibleFrom || ""} onChange={(e) => save({ ...db, visibleFrom: e.target.value })} /></Field>
+                <Btn kind="ghost" onClick={() => save({ ...db, visibleFrom: "" })}>{t("إلغاء (إظهار الكل)", "Clear (show all)")}</Btn>
+              </div>
+            </div>
+          )}
           {user.role === "Admin" && (
             <div className="border-t border-slate-100 pt-4 mt-2">
               <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Clock size={16} /> {t("نافذة رفع تحويلات المناديب", "Rider Transfer Window")}</h4>
