@@ -404,10 +404,23 @@ function computeEarn(company, type, orders) {
 }
 
 /* قواعد راتب الفول تايم (قابلة للضبط من الإعدادات): شهري ثابت أو بالساعة، لكل المناطق أو مناطق محددة */
+// توحيد أسماء المناطق: يقبل الاسم الإنجليزي والعربي وأي اختلاف في المسافات/الرموز
+const FT_AREA_ALIAS = {
+  nizwa: "Nizwa", نزوي: "Nizwa",
+  muscatseeb: "Muscat / Seeb", مسقطالسيب: "Muscat / Seeb", السيب: "Muscat / Seeb", seeb: "Muscat / Seeb",
+  muscatbosher: "Muscat / Bosher", مسقطبوشر: "Muscat / Bosher", بوشر: "Muscat / Bosher", bosher: "Muscat / Bosher",
+  liwa: "Liwa", ليوا: "Liwa",
+  sur: "Sur", صور: "Sur",
+  sohar: "Sohar", صحار: "Sohar",
+  salalah: "Salalah", salala: "Salalah", صلاله: "Salalah",
+  saham: "Saham", صحم: "Saham",
+};
+const ftNorm = (s) => String(s || "").toLowerCase().replace(/[\s\/\-_.]+/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+const ftCanon = (s) => FT_AREA_ALIAS[ftNorm(s)] || String(s || "").trim();
 function ftRuleFor(db, area) {
   const rules = (db && db.ftPayRules) || [];
-  const a = String(area || "").trim();
-  const specific = rules.find((r) => Array.isArray(r.areas) && r.areas.length && r.areas.map((x) => String(x).trim()).includes(a));
+  const a = ftCanon(area);
+  const specific = a && rules.find((r) => Array.isArray(r.areas) && r.areas.length && r.areas.some((x) => ftCanon(x) === a));
   if (specific) return specific;
   return rules.find((r) => !r.areas || r.areas.length === 0) || null;
 }
@@ -3973,6 +3986,7 @@ function TaskDetail({ id, me, db, onChanged }) {
             {mine && !adm && k.status !== "Under Review" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("بدء العمل", "Start"), () => setStatus("In Progress"), "#2563eb")}
             {adm && k.status !== "Completed" && btn(t("اعتماد كمكتملة", "Approve as completed"), () => setStatus("Completed"), "#0f9d58")}
             {adm && k.status === "Under Review" && btn(t("إعادة للعمل", "Send back"), () => setStatus("In Progress"), "#2563eb")}
+            {adm && k.status === "On Hold" && btn(t("إلغاء التعليق", "Resume"), () => setStatus("In Progress"), "#2563eb")}
             {adm && k.status !== "On Hold" && k.status !== "Completed" && k.status !== "Cancelled" && btn(t("تعليق", "Hold"), () => setStatus("On Hold"), "#d97706")}
             {adm && k.status !== "Cancelled" && k.status !== "Completed" && btn(t("إلغاء", "Cancel"), () => setStatus("Cancelled"), "#c0341d")}
           </div>
@@ -5721,6 +5735,15 @@ export default function App() {
                           )}
                         </div>
                       ))}
+                      {(() => {
+                        const unmatched = (db.riders || []).filter((r) => r.type === "Full Time" && !ftRuleFor(db, r.area));
+                        return unmatched.length > 0 ? (
+                          <div className="rounded-lg p-3 text-xs" style={{ background: "#fff7ed", color: "#9a3412" }}>
+                            {t("⚠️ مناديب فول تايم ما لهم قاعدة راتب (يُحسبون بالسعر الافتراضي " + HOUR_RATE + "):", "⚠️ Full-time riders with no matching salary rule (paid default " + HOUR_RATE + "):")}
+                            <div className="mt-1 flex gap-1 flex-wrap">{unmatched.map((r) => <span key={r.id} className="bg-white border border-orange-200 rounded px-2 py-0.5">{r.name} · {r.area || t("بدون منطقة", "no area")}</span>)}</div>
+                          </div>
+                        ) : null;
+                      })()}
                       <Btn kind="ghost" size="sm" onClick={() => setRules([...rules, { id: uid(), mode: "monthly", amount: "", areas: [] }])}><Plus size={14} /> {t("إضافة قاعدة راتب", "Add salary rule")}</Btn>
                     </div>
                   );
