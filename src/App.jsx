@@ -3881,6 +3881,7 @@ const TASK_ST = { "New": ["جديدة", "New"], "In Progress": ["قيد التن
 const TASK_ST_COLOR = { "New": "#6b7280", "In Progress": "#2563eb", "Under Review": "#7c3aed", "Completed": "#0f9d58", "Overdue": "#c0341d", "On Hold": "#d97706", "Cancelled": "#94a3b8" };
 const TASK_PRI = { High: [t("عالية", "High"), "#c0341d"], Medium: [t("متوسطة", "Medium"), "#d97706"], Low: [t("منخفضة", "Low"), "#0f9d58"] };
 const TASK_DEPTS = ["عمليات", "مالية", "موارد بشرية", "تقنية", "مبيعات", "خدمة العملاء"];
+const taskWho = (db, em) => (db && db.staff && db.staff[em] && db.staff[em].name) || em; // اسم الموظف من قائمة الموظفين، وإلا الإيميل
 const taskFmt = (v) => (v ? new Date(v).toLocaleString(LANG === "en" ? "en-GB" : "ar-OM", { timeZone: "Asia/Muscat", dateStyle: "short", timeStyle: "short" }) : "—");
 const taskLocalInput = (v) => { if (!v) return ""; const d = new Date(v); const p = (n) => String(n).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()); };
 const taskIso = (v) => (v ? new Date(v).toISOString() : null);
@@ -3970,7 +3971,7 @@ function TaskDetail({ id, me, db, onChanged }) {
         <div><span className="text-slate-400 text-xs">{t("البداية", "Start")}</span><div dir="ltr">{taskFmt(k.start_at)}</div></div>
         <div><span className="text-slate-400 text-xs">{t("الموعد النهائي", "Deadline")}</span><div dir="ltr">{taskFmt(k.deadline_at)}</div></div>
         <div><span className="text-slate-400 text-xs">{t("المتبقي", "Remaining")}</span><div>{taskRemain(k)}</div></div>
-        <div><span className="text-slate-400 text-xs">{t("أنشأها", "Created by")}</span><div dir="ltr">{k.created_by}</div></div>
+        <div><span className="text-slate-400 text-xs">{t("أنشأها", "Created by")}</span><div>{taskWho(db, k.created_by)}</div></div>
       </div>
 
       <div className="rounded-xl border border-slate-100 p-3 space-y-3">
@@ -4158,7 +4159,7 @@ function TasksModule({ db, mode }) {
                     <td className="px-3 text-slate-500" dir="ltr">{taskFmt(r.deadline_at)}</td>
                     <td className="px-3"><TaskBadge st={r.effective_status} /></td>
                     <td className="px-3"><div className="flex items-center gap-2"><TaskBar p={r.progress} st={r.effective_status} /><span className="text-xs text-slate-500">{r.progress}%</span></div></td>
-                    <td className="px-3 text-slate-500" dir="ltr">{r.created_by}</td>
+                    <td className="px-3 text-slate-500">{taskWho(db, r.created_by)}</td>
                     <td className="px-3"><button onClick={() => setSel(r.id)} className="text-xs font-semibold" style={{ color: BRAND.blue }}>{t("عرض", "View")}</button></td>
                   </tr>
                 ))}
