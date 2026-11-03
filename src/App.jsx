@@ -2725,7 +2725,7 @@ function MonthlyTab({ company, db }) {
       {!riderId ? (
         <>
           <div className="flex justify-end">
-            <Btn kind="ghost" size="sm" onClick={() => exportExcel(rdrs.map((r) => { const s = summarize(r.id); return { المندوب: r.name, النوع: r.type, أيام_العمل: s.days, الطلبات: s.orders, COD: s.cod, الساعات_المحسوبة: s.hoursCapped, الساعات_الفعلية: s.hoursRaw, متوسط_القبول: s.avgAccept, المستحق: s.earn }; }).filter((x) => x.أيام_العمل > 0), "Monthly_" + company + "_" + month)}><Download size={14} /> Excel</Btn>
+            <Btn kind="ghost" size="sm" onClick={() => exportExcel(rdrs.map((r) => { const s = summarize(r.id); return { المندوب: r.name, ID: r.companyId || "", الهاتف: r.phone || "", النوع: r.type, أيام_العمل: s.days, الطلبات: s.orders, COD: s.cod, الساعات_المحسوبة: s.hoursCapped, الساعات_الفعلية: s.hoursRaw, متوسط_القبول: s.avgAccept, المستحق: s.earn }; }).filter((x) => x.أيام_العمل > 0), "Monthly_" + company + "_" + month)}><Download size={14} /> Excel</Btn>
           </div>
           <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
             <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[tr("المندوب"), tr("النوع"), t("أيام", "Days"), t("الطلبات", "Orders"), "COD", t("الساعات", "Hours"), t("متوسط القبول", "Avg accept"), t("المستحق", "Earnings")].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}</tr></thead>
@@ -2850,7 +2850,7 @@ function DuesTab({ company, db, save, user }) {
           <Btn kind="ghost" onClick={dlPayoutTemplate}><Download size={15} /> {t("نموذج الدفع", "Payout template")}</Btn>
           <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold border border-slate-200 bg-white cursor-pointer"><Upload size={15} /> {t("رفع شيت الدفع", "Upload payouts")}<input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files[0]) uploadPayouts(e.target.files[0]); e.target.value = ""; }} /></label>
           <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-52" placeholder={t("اسم / رقم / ID", "name / phone / ID")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          <Btn kind="ghost" onClick={() => exportExcel(list.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, النوع: r.type, إجمالي_الراتب: m.earn, خصم_COD: m.codDed, صافي_الراتب: m.netSalary, المدفوع: m.paidDues, المتبقي: m.duesRemaining, البنك: r.bankName || "", الحساب: r.bank || "" }; }), "Dues_" + company)}><Download size={15} /> Excel</Btn>
+          <Btn kind="ghost" onClick={() => exportExcel(list.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, ID: r.companyId || "", الهاتف: r.phone || "", النوع: r.type, إجمالي_الراتب: m.earn, خصم_COD: m.codDed, صافي_الراتب: m.netSalary, المدفوع: m.paidDues, المتبقي: m.duesRemaining, البنك: r.bankName || "", الحساب: r.bank || "" }; }), "Dues_" + company)}><Download size={15} /> Excel</Btn>
         </div>
       </div>
       <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
