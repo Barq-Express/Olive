@@ -810,7 +810,19 @@ function ExcelImporter({ company, riders, onApply, onAddRider, onActivate }) {
       {headers && (
         <div className="mt-5 border-t border-slate-100 pt-4">
           {(() => { const unm = rows.filter((r) => !matchRider(r)).length; return unm > 0 ? <div className="mb-3 p-3 rounded-lg text-sm" style={{ background: "#fff7ed", color: "#9a3412" }}>⚠️ {t("يوجد", "There are")} <b>{unm}</b> {t("مندوب في الشيت غير مسجّلين لديك. اضغط \"تسجيل الآن\" بجانب كل واحد لتسجيله فوراً، وستظهر طلباته مباشرة.", "rider(s) in the sheet not registered. Click \"Register now\" next to each to add them instantly; their orders will attach immediately.")}</div> : null; })()}
-          {(() => { const inact = rows.map((r) => matchRider(r)).filter((rd) => rd && rd.status !== "Active").length; return inact > 0 ? <div className="mb-3 p-3 rounded-lg text-sm" style={{ background: "#fef9c3", color: "#854d0e" }}>💤 {t("يوجد", "There are")} <b>{inact}</b> {t("مندوب في الشيت لكنهم معطّلون (غير نشطين). اضغط \"تفعيل\" بجانب كل واحد لتظهر طلباته.", "rider(s) in the sheet who are inactive. Click \"Activate\" next to each to show their orders.")}</div> : null; })()}
+          {(() => {
+            // قائمة كل المناديب غير النشطين في الشيت (من كل الصفوف، مو فقط أول 300)
+            const seen = new Set(); const inactList = [];
+            rows.forEach((r) => { const rd = matchRider(r); if (rd && rd.status !== "Active" && !seen.has(rd.id)) { seen.add(rd.id); inactList.push(rd); } });
+            return inactList.length > 0 ? (
+              <div className="mb-3 p-3 rounded-lg text-sm" style={{ background: "#fef9c3", color: "#854d0e" }}>
+                💤 {t("يوجد", "There are")} <b>{inactList.length}</b> {t("مندوب في الشيت لكنهم معطّلون (غير نشطين). اضغط \"تفعيل\" بجانب كل واحد لتظهر طلباته.", "rider(s) in the sheet who are inactive. Click \"Activate\" next to each to show their orders.")}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {inactList.map((rd) => <button key={rd.id} onClick={() => onActivate && onActivate(rd.id)} className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white border border-yellow-400">{rd.name} · {t("تفعيل", "Activate")}</button>)}
+                </div>
+              </div>
+            ) : null;
+          })()}
           <p className="text-xs text-slate-500 mb-3">{tr("طابق الأعمدة")} ({rows.length} {tr("صف")}):</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Field label={t("ID الشركة", "Company ID")}><select className={inputCls} value={map.id} onChange={(e) => setMap({ ...map, id: +e.target.value })}>{headers.map((h, i) => <option key={i} value={i}>{h || `${tr("عمود")} ${i + 1}`}</option>)}</select></Field>
