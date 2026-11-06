@@ -3659,6 +3659,10 @@ function Employees({ db, save, user }) {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, regAgent: !a.regAgent } } });
   };
+  const toggleRegViewer = (a) => {
+    const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
+    save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, regViewer: !a.regViewer } } });
+  };
   const toggleCodAgent = (a) => {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, codAgentPerm: !a.codAgentPerm } } });
@@ -3673,10 +3677,11 @@ function Employees({ db, save, user }) {
   const changeRole = (a, newRole) => {
     if (newRole === a.role) return;
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
-    const roleName = { Admin: t("مدير النظام", "System Admin"), "Operations Manager": t("مدير العمليات", "Operations Manager"), Finance: t("المالية", "Finance"), Supervisor: t("مشرف شركة", "Supervisor") }[newRole] || newRole;
+    const roleName = { Admin: t("مدير النظام", "System Admin"), "Operations Manager": t("مدير العمليات", "Operations Manager"), Finance: t("المالية", "Finance"), Supervisor: t("مشرف شركة", "Supervisor"), Registration: t("متابعة التسجيل فقط", "Registration only") }[newRole] || newRole;
     if (!window.confirm(t("تغيير دور " + (a.name || a.email) + " إلى: " + roleName + "؟", "Change role of " + (a.name || a.email) + " to: " + roleName + "?"))) return;
     const next = { ...cur, role: newRole };
     if (newRole !== "Supervisor") next.company = null; // الشركة تخص المشرف فقط
+    if (newRole === "Registration") next.regAgent = true; // متابعة التسجيل فقط = صلاحية التسجيل تلقائياً
     else if (!next.company) next.company = "Snoonu";
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: next } });
   };
@@ -3748,10 +3753,10 @@ function Employees({ db, save, user }) {
             <div key={a.email} className="flex items-center justify-between border-b border-slate-50 py-1.5 flex-wrap gap-2">
               <span dir="ltr" className="font-mono text-xs text-slate-700">{a.email}</span>
               <span className="flex items-center gap-2">
-                {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.role} onChange={(e) => changeRole(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: BRAND.blue }} title={t("تغيير الدور", "Change role")}><option value="Admin">{roleLabel("Admin")}</option><option value="Operations Manager">{roleLabel("Operations Manager")}</option><option value="Finance">{roleLabel("Finance")}</option><option value="Supervisor">{roleLabel("Supervisor")}</option></select> : <Pill color={BRAND.blue}>{roleLabel(a.role)}</Pill>}{isAdmin && a.role === "Supervisor" && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.company || "Snoonu"} onChange={(e) => changeCompany(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: CMETA[a.company]?.color || "#64748b" }} title={t("تغيير الشركة", "Change company")}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select> : (a.company ? companyPill(a.company) : null)}{a.regAgent ? <Pill color="#0f9d58">{t("متابع تسجيل", "Reg agent")}</Pill> : null}
+                {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.role} onChange={(e) => changeRole(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: BRAND.blue }} title={t("تغيير الدور", "Change role")}><option value="Admin">{roleLabel("Admin")}</option><option value="Operations Manager">{roleLabel("Operations Manager")}</option><option value="Finance">{roleLabel("Finance")}</option><option value="Supervisor">{roleLabel("Supervisor")}</option><option value="Registration">{t("متابعة التسجيل فقط (بدون مناديب)", "Registration only (no riders)")}</option></select> : <Pill color={BRAND.blue}>{a.role === "Registration" ? t("متابعة التسجيل فقط", "Registration only") : roleLabel(a.role)}</Pill>}{isAdmin && a.role === "Supervisor" && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.company || "Snoonu"} onChange={(e) => changeCompany(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: CMETA[a.company]?.color || "#64748b" }} title={t("تغيير الشركة", "Change company")}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select> : (a.company ? companyPill(a.company) : null)}{a.regAgent ? <Pill color="#0f9d58">{t("متابع تسجيل", "Reg agent")}</Pill> : null}
                 {a.disabled ? <Pill color="#c0341d">{t("معطّل", "Disabled")}</Pill> : null}
                 {a.codAgentPerm ? <Pill color={BRAND.blue}>{t("متابع تحويلات", "Transfers agent")}</Pill> : null}
-                {isAdmin && <button onClick={() => toggleAgent(a)} className="text-xs font-semibold" style={{ color: a.regAgent ? "#c0341d" : "#0f9d58" }} title={t("تفعيل/إلغاء متابعة التسجيل", "Toggle registration follow-up")}>{a.regAgent ? t("إلغاء متابعة التسجيل", "Unset reg") : t("متابع تسجيل", "Reg agent")}</button>}
+                {isAdmin && <button onClick={() => toggleAgent(a)} className="text-xs font-semibold" style={{ color: a.regAgent ? "#c0341d" : "#0f9d58" }} title={t("تفعيل/إلغاء متابعة التسجيل", "Toggle registration follow-up")}>{a.regAgent ? t("إلغاء متابعة التسجيل", "Unset reg") : t("متابع تسجيل", "Reg agent")}</button>}{isAdmin && <button onClick={() => toggleRegViewer(a)} className="text-xs font-semibold" style={{ color: a.regViewer ? "#c0341d" : "#0f9d58" }} title={t("يشوف تبويب التسجيل كامل (عرض فقط بدون تعديل)", "Sees registration tab (view only)")}>{a.regViewer ? t("إلغاء عرض التسجيل", "Unset view") : t("يشوف التسجيل (عرض فقط)", "Reg view only")}</button>}
                 {isAdmin && <button onClick={() => toggleCodAgent(a)} className="text-xs font-semibold" style={{ color: a.codAgentPerm ? "#c0341d" : BRAND.blue }} title={t("تفعيل/إلغاء متابعة التحويلات", "Toggle transfers follow-up")}>{a.codAgentPerm ? t("إلغاء متابعة التحويلات", "Unset transfers") : t("متابع تحويلات", "Transfers agent")}</button>}
                 {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" && <button onClick={() => toggleDisabled(a)} className="text-xs font-semibold" style={{ color: a.disabled ? "#0f9d58" : "#c0341d" }} title={t("تعطيل/تفعيل الحساب", "Disable/enable account")}>{a.disabled ? t("تفعيل الحساب", "Enable") : t("تعطيل الحساب", "Disable")}</button>}
                 {isAdmin && <button onClick={() => { setResetAcc(a); setResetPw(""); setResetMsg(""); }} className="text-xs font-semibold" style={{ color: BRAND.orange }} title={t("إعادة تعيين كلمة المرور", "Reset password")}><KeyRound size={13} className="inline" /> {t("كلمة المرور", "Password")}</button>}
@@ -4230,7 +4235,9 @@ function TasksModule({ db, mode }) {
   );
 }
 
-function RegistrationModule({ db, save, user, onRefresh }) {
+function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = false }) {
+  // عرض فقط: أي كتابة تصير لا شي (كل التعديلات تمر من save)
+  const save = readOnly ? () => {} : saveRaw;
   const regs = db.registrations || [];
   // authorized agents = staff accounts flagged regAgent; fallback to legacy regStaff names
   const staffAgents = Object.entries(db.staff || {}).filter(([, p]) => p && p.regAgent).map(([email, p]) => ({ id: email, name: p.name || email }));
@@ -4292,7 +4299,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
     const pickRA = makeAgentPicker(db, rider.company); const riderA = { ...rider, codAgent: rider.codAgent || pickRA() };
     // تحديث محلي فوري + كتابة موجّهة ذرّية (تتفادى فشل حفظ كل البيانات)
     save({ ...db, riders: [...db.riders, riderA], registrations: regs.map((x) => (x.id === r.id ? { ...x, converted: true, convertedAt: todayStr() } : x)) });
-    supabase.rpc("convert_registration", { p_reg_id: r.id, p_rider: riderA }).then(({ error }) => {
+    if (!readOnly) supabase.rpc("convert_registration", { p_reg_id: r.id, p_rider: riderA }).then(({ error }) => {
       if (error) alert(tr("تعذّر حفظ الاعتماد، حاول مرة أخرى"));
     });
     setSel(null);
@@ -4332,6 +4339,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
         </div>
       </div>
 
+      {readOnly && <div className="mb-3 p-3 rounded-lg text-sm" style={{ background: "#eef2ff", color: "#3730a3" }}>👁 {t("عرض فقط: تشوف كل التسجيلات والمستندات، لكن ما تقدر تغيّر شي.", "View only: you can see all registrations and documents, but cannot change anything.")}</div>}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
         <StatCard label={t("إجمالي الطلبات", "Total")} value={counts.total} />
         <StatCard label={t("جديدة", "New")} value={counts.new} color={REG_STATUS_COLOR.new} />
@@ -4344,7 +4352,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
 
       {isManager && <IntakeLinkMaker zones={Array.from(new Set([...(db.areas || []), ...regAreas, ...db.riders.map((r) => r.area).filter(Boolean)].map((z) => String(z).trim()).filter(Boolean))).sort()} />}
 
-      {isManager && <SnoonuExport regs={regs} db={db} save={save} />}
+      {(isManager || (user && user.regAgent)) && !readOnly && <SnoonuExport regs={regs} db={db} save={save} />}
 
       <Card className="p-4">
         <h3 className="font-bold text-slate-800 text-sm mb-2">{t("عدد الطلبات لكل موظف", "Requests per assignee")}</h3>
@@ -4960,16 +4968,33 @@ function MyHRView({ db, save, user }) {
   );
 }
 
+// عدد المسجلين فقط (بدون أسماء أو مستندات): للمشرفين اللي مفعّل لهم "يشوف عدد التسجيل"
+function RegStats({ db }) {
+  const regs = db.registrations || [];
+  const byStatus = {}; const byZone = {};
+  regs.forEach((r) => { const s = regStatus(r); byStatus[s] = (byStatus[s] || 0) + 1; const z = (r.wilaya || "").trim() || "—"; byZone[z] = (byZone[z] || 0) + 1; });
+  const cards = [["total", t("إجمالي المسجلين", "Total registered"), regs.length, BRAND.navy]].concat(Object.keys(REG_STATUS_LABEL).map((k) => [k, t(REG_STATUS_LABEL[k][0], REG_STATUS_LABEL[k][1]), byStatus[k] || 0, REG_STATUS_COLOR[k]]));
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-slate-800">{t("عدد التسجيل", "Registration count")}</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{cards.map(([k, l, v, c]) => <Card key={k} className="p-4"><div className="text-xs text-slate-500">{l}</div><div className="text-2xl font-bold" style={{ color: c }}>{v}</div></Card>)}</div>
+      <Card className="p-4"><div className="text-sm font-semibold text-slate-700 mb-2">{t("حسب المنطقة", "By zone")}</div>{Object.entries(byZone).sort((a, b) => b[1] - a[1]).map(([z, n]) => <div key={z} className="flex justify-between text-sm py-1 border-b border-slate-50"><span>{z}</span><b>{n}</b></div>)}</Card>
+    </div>
+  );
+}
+
 function sidebarFor(user, db) {
   const regItem = { key: "registration", label: t("تسجيل المناديب", "Registration"), kind: "registration" };
   // متابع تسجيل فقط: يشوف صفحة التسجيل ومهامه، بدون أي تبويب مناديب
   if (user.role === "Registration") return [{ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" }, regItem];
+  const statsItem = { key: "regstats", label: t("عدد التسجيل", "Registration count"), kind: "regstats" };
   if (user.role === "Supervisor") {
     const items = [{ key: "company:" + user.company, label: cLabel(user.company), kind: "company", company: user.company }];
     items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
     const myRecS = hrRecordFor(db, user);
     if (myRecS) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
     if (user.regAgent) items.push(regItem);
+    if (user.regViewer && !user.regAgent) items.push(regItem);
     return items;
   }
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
@@ -4991,6 +5016,7 @@ function sidebarFor(user, db) {
   } else if (user.regAgent) {
     items.push(regItem);
   }
+  if (user.regViewer && !user.regAgent) items.push(regItem);
   return items;
 }
 const ICON_FOR = { dashboard: LayoutDashboard, company: Building2, allriders: Users, reports: FileBarChart, shifts: Clock, employees: UserCog, registration: UserPlus, areas: MapPin, banks: Banknote, hr: Users, myhr: CalendarCheck, archive: Trash2, tasks: ClipboardList, mytasks: ClipboardList };
@@ -5627,8 +5653,9 @@ export default function App() {
     if (activeItem.kind === "employees") return <Employees db={db} save={save} user={user} />;
     if (activeItem.kind === "hr" && user.role === "Admin") return <HRWindow db={db} save={save} />;
     if (activeItem.kind === "myhr") return <MyHRView db={db} save={save} user={user} />;
+    if (activeItem.kind === "regstats") return <RegStats db={db} />;
     if (activeItem.kind === "tasks" || activeItem.kind === "mytasks") return <TasksModule db={db} mode={activeItem.kind} />;
-    if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} />;
+    if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} readOnly={!!(user && user.regViewer && !user.regAgent && user.role !== "Admin" && user.role !== "Operations Manager")} />;
     if (activeItem.kind === "areas") return <AreasWindow db={db} save={save} />;
     if (activeItem.kind === "banks") return <BanksWindow db={db} save={save} />;
     if (activeItem.kind === "archive") return <ArchiveWindow db={db} save={save} onRefresh={refreshDb} />;
