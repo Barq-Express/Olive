@@ -4401,7 +4401,18 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel ? sel.fullName : ""} wide>
         {sel && (() => { const r = regs.find((x) => x.id === sel.id) || sel; const st = regStatus(r); return (
           <div className="space-y-4">
-            <RegDocs r={r} />
+            <RegDocs r={r} canEdit={!readOnly} onDocChange={(k, p) => upd(r.id, { docs: { ...(r.docs || {}), [k]: p } })} />
+            {!readOnly && (
+              <div className="rounded-xl border border-slate-100 p-3 space-y-2">
+                <div className="text-xs font-bold text-slate-600">{t("تعديل البيانات", "Edit details")}</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {[["fullName", t("الاسم (إنجليزي كما في البطاقة)", "Name (English, as on Civil ID)"), "text"], ["phone", t("الهاتف", "Phone"), "text"], ["idNumber", t("البطاقة/الجواز", "ID/Passport"), "text"], ["email", t("البريد", "Email"), "text"], ["nationality", t("الجنسية", "Nationality"), "text"], ["wilaya", t("الولاية", "Wilaya"), "text"], ["plate", t("رقم اللوحة", "Plate"), "text"], ["civilExpiry", t("انتهاء البطاقة", "Civil ID expiry"), "date"], ["licenseExpiry", t("انتهاء الرخصة", "License expiry"), "date"]].map(([k, l, type]) => (
+                    <Field key={k} label={l}><input type={type} dir="ltr" className={inputCls} value={r[k] || ""} onChange={(e) => upd(r.id, { [k]: e.target.value })} /></Field>
+                  ))}
+                </div>
+                {r.fullName && !/^[A-Za-z][A-Za-z .'-]*$/.test(r.fullName.trim()) && <div className="text-xs text-red-600">{t("الاسم لازم يكون إنجليزي كما في البطاقة", "Name must be in English as on the Civil ID")}</div>}
+              </div>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
               <div><span className="text-slate-400 text-xs">{t("الهاتف", "Phone")}</span><div dir="ltr">{r.phone}</div></div>
               <div><span className="text-slate-400 text-xs">{t("البريد", "Email")}</span><div dir="ltr">{r.email || "—"}</div></div>
@@ -5345,10 +5356,18 @@ function SnoonuExport({ regs, db, save }) {
 }
 
 // ===== الأدمن: بيانات الفورم والمستندات داخل طلب التسجيل =====
-function RegDocs({ r }) {
+function RegDocs({ r, canEdit = false, onDocChange }) {
   const docs = r.docs || {};
   const hasAny = Object.keys(docs).length > 0 || r.plate || r.civilExpiry || r.licenseExpiry;
-  if (!hasAny) return null;
+  if (!hasAny && !canEdit) return null;
+  // استبدال صورة: تُرفع لمجلد reg-<id> ثم يُحدّث مسار المستند في الطلب
+  const replaceDoc = async (key, file) => {
+    const ext = ((file.name || "").split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = "reg-" + r.id + "/" + key + "-" + Date.now() + "." + ext;
+    const { error } = await supabase.storage.from("rider-docs").upload(path, file, { upsert: false });
+    if (error) return alert(t("تعذّر رفع الصورة، حاول مرة أخرى", "Upload failed, try again"));
+    if (onDocChange) onDocChange(key, path);
+  };
   const open = (path) => supabase.storage.from("rider-docs").createSignedUrl(path, 600).then(({ data, error }) => {
     if (error || !data || !data.signedUrl) return alert(t("تعذّر فتح المستند", "Could not open the file"));
     window.open(data.signedUrl, "_blank", "noopener");
@@ -5360,10 +5379,13 @@ function RegDocs({ r }) {
         <div><span className="text-slate-400 text-xs">{t("انتهاء البطاقة", "Civil ID expiry")}</span><div dir="ltr">{r.civilExpiry || "—"}</div></div>
         <div><span className="text-slate-400 text-xs">{t("انتهاء الرخصة", "License expiry")}</span><div dir="ltr">{r.licenseExpiry || "—"}</div></div>
       </div>
-      {Object.keys(docs).length > 0 && (
+      {(Object.keys(docs).length > 0 || canEdit) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {INTAKE_DOCS.map(([k, en, ar]) => (
-            <button key={k} onClick={() => docs[k] && open(docs[k])} disabled={!docs[k]} className="text-xs text-start rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 disabled:opacity-40">{t(ar, en)}{docs[k] ? " 📄" : " ✗"}</button>
+            <div key={k} className="rounded-lg border border-slate-200 px-3 py-2">
+              <button onClick={() => docs[k] && open(docs[k])} disabled={!docs[k]} className="text-xs text-start disabled:opacity-40 w-full">{t(ar, en)}{docs[k] ? " 📄" : " ✗"}</button>
+              {canEdit && <label className="block text-[11px] font-semibold text-blue-700 cursor-pointer mt-1">{docs[k] ? t("استبدال الصورة", "Replace") : t("رفع الصورة", "Upload")}<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) replaceDoc(k, f); e.target.value = ""; }} /></label>}
+            </div>
           ))}
         </div>
       )}
