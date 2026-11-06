@@ -409,7 +409,7 @@ const FT_AREA_ALIAS = {
   nizwa: "Nizwa", نزوي: "Nizwa",
   muscatseeb: "Muscat / Seeb", مسقطالسيب: "Muscat / Seeb", السيب: "Muscat / Seeb", seeb: "Muscat / Seeb",
   muscatbosher: "Muscat / Bosher", مسقطبوشر: "Muscat / Bosher", بوشر: "Muscat / Bosher", bosher: "Muscat / Bosher",
-  liwa: "Liwa", ليوا: "Liwa",
+  liwa: "Liwa", ليوا: "Liwa", لوي: "Liwa",
   sur: "Sur", صور: "Sur",
   sohar: "Sohar", صحار: "Sohar",
   salalah: "Salalah", salala: "Salalah", صلاله: "Salalah",
@@ -5085,8 +5085,11 @@ const INTAKE_DOCS = [
   ["personal", "Personal Photo", "صورة شخصية"],
 ];
 
+// العمولة لكل منطقة (ريال عماني) — تظهر للمندوب وفي رسالة الرابط
+const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah: 1.1, Sohar: 1.3, Liwa: 1.3, Saham: 1.3, Sur: 1.3, Nizwa: 1.4 };
 function IntakeForm({ token, onToggleLang }) {
   const [zone, setZone] = useState("");
+  const [android, setAndroid] = useState(false);
   const [valid, setValid] = useState(null); // null = جارٍ التحقق
   const [f, setF] = useState({ plate: "", fullName: "", idNumber: "", phone: "", civilExpiry: "", licenseExpiry: "" });
   const [files, setFiles] = useState({});
@@ -5113,6 +5116,7 @@ function IntakeForm({ token, onToggleLang }) {
   const submit = async () => {
     const empty = Object.keys(f).some((k) => !String(f[k] || "").trim());
     if (empty) return setErr(t("عبّئ كل الحقول المطلوبة.", "Fill in all required fields."));
+    if (!android) return setErr(t("يشترط أن يكون الهاتف أندرويد.", "Your phone must be Android."));
     if (!/^[A-Za-z][A-Za-z .'-]*$/.test(f.fullName.trim())) return setErr(ERR.name_not_english);
     if (INTAKE_DOCS.some(([k]) => !files[k])) return setErr(t("ارفع كل المستندات السبعة.", "Upload all seven documents."));
     if (!consent) return setErr(t("يجب الموافقة على الإقرار.", "You must accept the declaration."));
@@ -5167,6 +5171,16 @@ function IntakeForm({ token, onToggleLang }) {
             <h2 className="font-extrabold text-lg text-slate-800 mb-1">{t("تسجيل مندوب جديد", "New Driver Registration")}</h2>
             <p className="text-xs text-slate-500 mb-5">{t("الحقول الرمادية ثابتة. عبّئ بياناتك وارفع مستنداتك ثم أرسل.", "Grey fields are fixed. Fill in your details, upload your documents, then submit.")}</p>
 
+            <div className="rounded-xl p-4 mb-5 space-y-2 text-sm" style={{ background: "#f0fdf4", color: "#14532d" }}>
+              <div className="font-bold">{t("شروط الانضمام", "Requirements")}</div>
+              <div>• {t("يشترط أن يكون الهاتف أندرويد.", "Your phone must be Android.")}</div>
+              <div>• {t("هذا الدوام الجزئي فقط. أما للدوام بعقود فنرجو التواصل معنا.", "This is for part-time work only. For contract jobs, please contact us.")}</div>
+              {ZONE_COMMISSION[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{ZONE_COMMISSION[ftCanon(zone)].toFixed(1)} {t("ريال عماني", "OMR")}</b></div>}
+              <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                <input type="checkbox" className="mt-1" checked={android} onChange={(e) => setAndroid(e.target.checked)} />
+                <span>{t("أؤكد أن هاتفي أندرويد", "I confirm my phone is Android")} <span className="text-red-500">*</span></span>
+              </label>
+            </div>
             <div className="grid md:grid-cols-2 gap-4 mb-5">
               {locked(t("الشركة", "Company"), "Olive")}
               {locked(t("نوع العقد", "Contract Type"), "Part Time")}
@@ -5228,13 +5242,22 @@ function IntakeLinkMaker({ zones }) {
   };
   const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); } catch (e) { /* ignore */ } };
   // نص الرسالة للمناديب بالعربي (ثابت)
+  // العمولة لكل منطقة (ريال عماني)
+  const zoneCom = (() => {
+    const v = ZONE_COMMISSION[ftCanon(zone)];
+    return v !== undefined ? v.toFixed(1) : "";
+  })();
   const msg = link ? [
     "مرحباً 👋",
     "يدعوكم فريق أولايف للتسجيل كمندوب توصيل.",
     "يرجى التسجيل من خلال الرابط التالي ورفع المستندات المطلوبة بأنفسكم:",
     "🔗 " + link,
     "",
-    "قبل البدء بالتسجيل:",
+    ...(zoneCom ? ["💰 العمولة: " + zoneCom + " ريال عماني"] : []),
+    "",
+    "شروط الانضمام:",
+    "• يشترط أن يكون الهاتف أندرويد.",
+    "• هذا الدوام الجزئي فقط، أما للدوام بعقود فنرجو التواصل معنا.",
     "• كتابة الاسم باللغة الإنجليزية تماماً كما هو مدوّن في البطاقة المدنية.",
     "• تجهيز صور واضحة من البطاقة المدنية، ورخصة القيادة، وملكية المركبة، وصورة شخصية.",
     "",
