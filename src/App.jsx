@@ -5175,7 +5175,7 @@ function IntakeForm({ token, onToggleLang }) {
               <div className="font-bold">{t("شروط الانضمام", "Requirements")}</div>
               <div>• {t("يشترط أن يكون الهاتف أندرويد.", "Your phone must be Android.")}</div>
               <div>• {t("هذا الدوام الجزئي فقط. أما للدوام بعقود فنرجو التواصل معنا.", "This is for part-time work only. For contract jobs, please contact us.")}</div>
-              {ZONE_COMMISSION[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{ZONE_COMMISSION[ftCanon(zone)].toFixed(1)} {t("ريال عماني", "OMR")}</b></div>}
+              {ZONE_COMMISSION[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{ZONE_COMMISSION[ftCanon(zone)].toFixed(1)} {t("ريال عماني لكل طلب يتم توصيله بنجاح", "OMR per successfully delivered order")}</b></div>}
               <label className="flex items-start gap-2 pt-1 cursor-pointer">
                 <input type="checkbox" className="mt-1" checked={android} onChange={(e) => setAndroid(e.target.checked)} />
                 <span>{t("أؤكد أن هاتفي أندرويد", "I confirm my phone is Android")} <span className="text-red-500">*</span></span>
@@ -5253,7 +5253,7 @@ function IntakeLinkMaker({ zones }) {
     "يرجى التسجيل من خلال الرابط التالي ورفع المستندات المطلوبة بأنفسكم:",
     "🔗 " + link,
     "",
-    ...(zoneCom ? ["💰 العمولة: " + zoneCom + " ريال عماني"] : []),
+    ...(zoneCom ? ["💰 العمولة: " + zoneCom + " ريال عماني لكل طلب يتم توصيله بنجاح"] : []),
     "",
     "شروط الانضمام:",
     "• يشترط أن يكون الهاتف أندرويد.",
