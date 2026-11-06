@@ -5086,7 +5086,9 @@ const INTAKE_DOCS = [
 ];
 
 // العمولة لكل منطقة (ريال عماني) — تظهر للمندوب وفي رسالة الرابط
-const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah: 1.1, Sohar: 1.3, Liwa: 1.3, Saham: 1.3, Sur: 1.3, Nizwa: 1.4 };
+const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah: 1.1, Sohar: 1.3, Liwa: 1.3, Saham: 1.3, Nizwa: 1.4 };
+// رقم الموظف المختص لكل منطقة — يظهر في صفحة التسجيل فقط (مو في الرسالة)
+const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Muscat / Seeb": "+96890102631", "Muscat / Bosher": "+96890102631", "Sohar": "+96898174669", "Liwa": "+96898174669", "Saham": "+96898174669" };
 function IntakeForm({ token, onToggleLang }) {
   const [zone, setZone] = useState("");
   const [android, setAndroid] = useState(false);
@@ -5175,10 +5177,11 @@ function IntakeForm({ token, onToggleLang }) {
               <div className="font-bold">{t("شروط الانضمام", "Requirements")}</div>
               <div>• {t("يشترط أن يكون الهاتف أندرويد.", "Your phone must be Android.")}</div>
               <div>• {t("هذا الدوام الجزئي فقط. أما للدوام بعقود فنرجو التواصل معنا.", "This is for part-time work only. For contract jobs, please contact us.")}</div>
+              {ZONE_CONTACT[ftCanon(zone)] && <div>• {t("للتواصل مع الموظف المختص:", "Contact our staff:")} <span dir="ltr" className="inline-flex gap-3 flex-wrap align-middle"><a className="font-bold underline" href={"tel:" + ZONE_CONTACT[ftCanon(zone)]}>📞 {ZONE_CONTACT[ftCanon(zone)]}</a><a className="font-bold underline" target="_blank" rel="noopener noreferrer" href={"https://wa.me/" + ZONE_CONTACT[ftCanon(zone)].replace("+", "")}>💬 {t("واتساب", "WhatsApp")}</a></span></div>}
               {ZONE_COMMISSION[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{ZONE_COMMISSION[ftCanon(zone)].toFixed(1)} {t("ريال عماني لكل طلب يتم توصيله بنجاح", "OMR per successfully delivered order")}</b></div>}
               <label className="flex items-start gap-2 pt-1 cursor-pointer">
                 <input type="checkbox" className="mt-1" checked={android} onChange={(e) => setAndroid(e.target.checked)} />
-                <span>{t("أؤكد أن هاتفي أندرويد", "I confirm my phone is Android")} <span className="text-red-500">*</span></span>
+                <span>{t("أقر بأنني أمتلك أندرويد أو ساقوم بتوفيره خلال الأيام الثلاثة القادمة", "I confirm I have an Android phone or will get one within the next three days")} <span className="text-red-500">*</span></span>
               </label>
             </div>
             <div className="grid md:grid-cols-2 gap-4 mb-5">
