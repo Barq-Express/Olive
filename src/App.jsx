@@ -3646,7 +3646,7 @@ function Employees({ db, save, user }) {
       setAccBusy(false);
       if (error || (data && data.error)) return setAccMsg((data && data.error) ? String(data.error) : t("تعذّر إنشاء الحساب — تأكد من نشر الدالة", "Failed to create account — check the function is deployed"));
       const company = acc.role === "Supervisor" ? (acc.company || "Snoonu") : null;
-      save({ ...db, staff: { ...(db.staff || {}), [email]: { role: acc.role, name: acc.name || email, company, regAgent: !!acc.regAgent } } });
+      save({ ...db, staff: { ...(db.staff || {}), [email]: { role: acc.role, name: acc.name || email, company, regAgent: acc.role === "Registration" || !!acc.regAgent } } });
       setAccMsg(t("✅ تم إنشاء الحساب بنجاح", "✅ Account created successfully"));
       setAcc(blankAcc);
     });
@@ -3783,6 +3783,7 @@ function Employees({ db, save, user }) {
               <option value="Operations Manager">{roleLabel("Operations Manager")}</option>
               <option value="Finance">{roleLabel("Finance")}</option>
               <option value="Supervisor">{roleLabel("Supervisor")}</option>
+              <option value="Registration">{t("متابعة التسجيل فقط (بدون مناديب)", "Registration only (no riders)")}</option>
             </select>
           </Field>
           {acc.role === "Supervisor" && (
@@ -4300,7 +4301,7 @@ function RegistrationModule({ db, save, user, onRefresh }) {
   // manager sees all; a non-manager agent sees only their own requests
   const visibleRegs = isManager ? regs : regs.filter((r) => r.assignee === myId || agentName(r.assignee) === (user && user.name));
 
-  const counts = { total: visibleRegs.length, new: 0, in_progress: 0, docs_missing: 0, await_training: 0, ready: 0, completed: 0, rejected: 0 };
+  const counts = { total: visibleRegs.length, new: 0, in_progress: 0, needs_fix: 0, docs_missing: 0, await_training: 0, ready: 0, completed: 0, rejected: 0 };
   visibleRegs.forEach((r) => { counts[regStatus(r)]++; });
   const perStaff = {}; agents.forEach((s) => { perStaff[s.id] = regs.filter((r) => r.assignee === s.id && !r.converted).length; });
 
@@ -4414,14 +4415,17 @@ function RegistrationModule({ db, save, user, onRefresh }) {
             </div>
 
             <div className="border border-slate-200 rounded-xl p-3">
-              <h4 className="font-bold text-sm text-slate-700 mb-2">{t("خطوات الاعتماد", "Approval Workflow")}</h4>
-              <div className="space-y-1">
-                {REG_STEPS.map((s) => { const on = r.steps && r.steps[s.key]; return (
-                  <button key={s.key} onClick={() => toggleStep(r, s.key)} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
-                    <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: on ? "#0f9d58" : "#e2e8f0", color: on ? "#fff" : "#94a3b8" }}>{on ? "✓" : ""}</span>
-                    <span className={"text-sm " + (on ? "text-slate-800 font-semibold" : "text-slate-500")}>{t(s.ar, s.en)}</span>
-                  </button>
-                ); })}
+              <h4 className="font-bold text-sm text-slate-700 mb-2">{t("المراجعة", "Review")}</h4>
+              <div className="space-y-2">
+                <button onClick={() => toggleStep(r, "docs_reviewed")} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
+                  <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.steps && r.steps.docs_reviewed ? "#0f9d58" : "#e2e8f0", color: "#fff" }}>{r.steps && r.steps.docs_reviewed ? "✓" : ""}</span>
+                  <span className="text-sm font-semibold text-slate-800">{t("تمت المراجعة (يظهر في الشيت لإرساله لسنونو)", "Reviewed (appears in the sheet for Snoonu)")}</span>
+                </button>
+                <button onClick={() => upd(r.id, { needsFix: !r.needsFix, fixNote: r.needsFix ? "" : (r.fixNote || "") })} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
+                  <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.needsFix ? "#d97706" : "#e2e8f0", color: "#fff" }}>{r.needsFix ? "!" : ""}</span>
+                  <span className="text-sm font-semibold text-slate-800">{t("يحتاج تصحيح (الموظف يتواصل مع المندوب)", "Needs fix (staff contacts the rider)")}</span>
+                </button>
+                {r.needsFix && <Field label={t("وش المطلوب تصحيحه؟ (مثلاً صورة غير واضحة)", "What needs fixing? (e.g. unclear photo)")}><input className={inputCls} value={r.fixNote || ""} onChange={(e) => upd(r.id, { fixNote: e.target.value })} /></Field>}
               </div>
               <div className="grid md:grid-cols-3 gap-2 mt-3">
                 <Field label="Username"><input className={inputCls} dir="ltr" value={r.username || ""} onChange={(e) => upd(r.id, { username: e.target.value })} /></Field>
@@ -4958,6 +4962,8 @@ function MyHRView({ db, save, user }) {
 
 function sidebarFor(user, db) {
   const regItem = { key: "registration", label: t("تسجيل المناديب", "Registration"), kind: "registration" };
+  // متابع تسجيل فقط: يشوف صفحة التسجيل ومهامه، بدون أي تبويب مناديب
+  if (user.role === "Registration") return [{ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" }, regItem];
   if (user.role === "Supervisor") {
     const items = [{ key: "company:" + user.company, label: cLabel(user.company), kind: "company", company: user.company }];
     items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
@@ -5008,14 +5014,13 @@ const regStepCount = (r) => REG_STEPS.filter((s) => r.steps && r.steps[s.key]).l
 const regStatus = (r) => {
   if (r.rejected) return "rejected";
   if (r.converted) return "completed";
-  if (regStepsDone(r)) return "ready";
-  if (r.steps && r.steps.docs_reviewed && !r.steps.training) return "await_training";
-  if (r.steps && r.steps.contacted && !r.steps.docs_received) return "docs_missing";
+  if (r.needsFix) return "needs_fix";            // يحتاج تصحيح: الموظف يتواصل مع المندوب، ما يُصدَّر لسنونو
+  if (r.steps && r.steps.docs_reviewed) return "ready"; // تمت المراجعة = يظهر في الشيت ويُرسل لسنونو
   if (regStepCount(r) > 0) return "in_progress";
   return "new";
 };
-const REG_STATUS_LABEL = { new: ["جديد", "New"], in_progress: ["قيد المتابعة", "In progress"], docs_missing: ["ناقص مستندات", "Docs missing"], await_training: ["بانتظار التدريب", "Awaiting training"], ready: ["جاهز للتحويل", "Ready to convert"], completed: ["تم التسجيل", "Registered"], rejected: ["مرفوض", "Rejected"] };
-const REG_STATUS_COLOR = { new: "#6b7280", in_progress: BRAND.blue, docs_missing: "#d97706", await_training: "#7c3aed", ready: "#0f9d58", completed: "#0C1B33", rejected: "#c0341d" };
+const REG_STATUS_LABEL = { new: ["جديد", "New"], in_progress: ["قيد المتابعة", "In progress"], needs_fix: ["يحتاج تصحيح", "Needs fix"], docs_missing: ["ناقص مستندات", "Docs missing"], await_training: ["بانتظار التدريب", "Awaiting training"], ready: ["تمت المراجعة", "Reviewed"], completed: ["تم التسجيل", "Registered"], rejected: ["مرفوض", "Rejected"] };
+const REG_STATUS_COLOR = { new: "#6b7280", in_progress: BRAND.blue, needs_fix: "#d97706", docs_missing: "#d97706", await_training: "#7c3aed", ready: "#0f9d58", completed: "#0C1B33", rejected: "#c0341d" };
 
 function RegInvalid({ onToggleLang }) {
   return (
