@@ -1376,7 +1376,7 @@ function OrdersTab({ company, db, save, user }) {
   const histRows = ims.filter((im) => inRange(im.date || "")).map((im) => {
     const res = (im.results || []).filter((r) => (hRider === "all" || r.riderId === hRider) && typeMatch(r.riderId) && areaMatch(r.riderId));
     return { date: im.date, orders: res.reduce((a, r) => a + (r.orders || 0), 0), cod: res.reduce((a, r) => a + (r.cod || 0), 0), due: res.reduce((a, r) => a + (r.transferDue || 0), 0), hours: res.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0) };
-  }).filter((x) => x.orders > 0 || x.cod > 0 || (hRider === "all" && hType === "all")).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }).filter((x) => x.orders > 0 || x.cod > 0 || x.hours > 0 || (hRider === "all" && hType === "all")).sort((a, b) => (a.date < b.date ? 1 : -1));
   const hTotals = histRows.reduce((a, x) => ({ orders: a.orders + x.orders, cod: a.cod + x.cod, due: a.due + x.due, hours: a.hours + x.hours }), { orders: 0, cod: 0, due: 0, hours: 0 });
   const setRow = (i, which, v) => setEditImp((e) => ({ ...e, results: e.results.map((r, idx) => (idx === i ? { ...r, [which]: v } : r)) }));
   const saveImport = () => {
