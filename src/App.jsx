@@ -4347,6 +4347,8 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
         <StatCard label={t("قيد المتابعة", "In progress")} value={counts.in_progress} color={REG_STATUS_COLOR.in_progress} />
         <StatCard label={t("ناقص مستندات", "Docs missing")} value={counts.docs_missing} color={REG_STATUS_COLOR.docs_missing} />
         <StatCard label={t("بانتظار التدريب", "Awaiting training")} value={counts.await_training} color={REG_STATUS_COLOR.await_training} />
+        <StatCard label={t("يحتاج تصحيح", "Needs fix")} value={counts.needs_fix} color={REG_STATUS_COLOR.needs_fix} />
+        <StatCard label={t("مرفوض", "Rejected")} value={counts.rejected} color="#dc2626" />
         <StatCard label={t("جاهزة للتحويل", "Ready")} value={counts.ready} color={REG_STATUS_COLOR.ready} />
         <StatCard label={t("تم تسجيلهم", "Registered")} value={counts.completed} color={REG_STATUS_COLOR.completed} />
       </div>
@@ -4458,13 +4460,13 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-3">
                 {isManager && <button onClick={() => delReg(r)} className="text-xs font-semibold text-slate-400">{t("حذف الطلب", "Delete request")}</button>}
-                {r.rejected
+                {readOnly ? null : r.rejected
                   ? <button onClick={() => unreject(r)} className="text-xs font-semibold" style={{ color: BRAND.blue }}>{t("إعادة تفعيل", "Reactivate")}</button>
                   : <button onClick={() => { setRejectFor(r); setRejectReason(""); setRejectErr(""); }} className="text-xs font-semibold text-red-600">{t("رفض الطلب", "Reject request")}</button>}
               </div>
               {r.converted
                 ? <Pill color="#0f9d58">{t("تم التحويل إلى مندوب ✓", "Converted to driver ✓")}</Pill>
-                : (!r.rejected && <Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn>)}
+                : (!readOnly && !r.rejected && <Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn>)}
             </div>
             {!r.converted && !regStepsDone(r) && <p className="text-xs text-slate-400 text-left">{t("أكمل جميع الخطوات لتفعيل التحويل.", "Complete all steps to enable conversion.")}</p>}
           </div>
