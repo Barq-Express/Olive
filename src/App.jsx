@@ -4306,7 +4306,8 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
   };
 
   // manager sees all; a non-manager agent sees only their own requests
-  const visibleRegs = isManager ? regs : regs.filter((r) => r.assignee === myId || agentName(r.assignee) === (user && user.name));
+  // المشرف بوضع "عرض فقط" يشوف كل التسجيلات (بدون تعديل)، والموظف العادي يشوف اللي معيّنة له بس
+  const visibleRegs = (isManager || readOnly) ? regs : regs.filter((r) => r.assignee === myId || agentName(r.assignee) === (user && user.name));
 
   const counts = { total: visibleRegs.length, new: 0, in_progress: 0, needs_fix: 0, docs_missing: 0, await_training: 0, ready: 0, completed: 0, rejected: 0 };
   visibleRegs.forEach((r) => { counts[regStatus(r)]++; });
