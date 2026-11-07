@@ -4315,7 +4315,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
 
   const regAreas = Array.from(new Set(visibleRegs.map((r) => (r.wilaya || r.area || "").trim()).filter(Boolean))).sort();
   const rows = visibleRegs.filter((r) => (
-    (r.fullName.includes(q) || (r.phone || "").includes(q) || (r.idNumber || "").includes(q)) &&
+    (r.fullName.includes(q) || (r.phone || "").includes(q) || (r.idNumber || "").includes(q) || String(r.id || "").slice(0, 8).toUpperCase().includes(q.trim().toUpperCase())) &&
     (statusF === "all" || regStatus(r) === statusF) &&
     (assigneeF === "all" || r.assignee === assigneeF) &&
     (areaF === "all" || (r.wilaya || r.area || "").trim() === areaF) &&
@@ -4364,7 +4364,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
 
       <Card className="p-4">
         <div className="grid md:grid-cols-5 gap-2 mb-4">
-          <Field label={t("بحث", "Search")}><input className={inputCls} placeholder={t("اسم / هاتف / بطاقة", "name / phone / ID")} value={q} onChange={(e) => setQ(e.target.value)} /></Field>
+          <Field label={t("بحث", "Search")}><input className={inputCls} placeholder={t("اسم / هاتف / بطاقة / رقم الطلب", "name / phone / ID / request no.")} value={q} onChange={(e) => setQ(e.target.value)} /></Field>
           <Field label={t("الحالة", "Status")}><select className={inputCls} value={statusF} onChange={(e) => setStatusF(e.target.value)}><option value="all">{t("الكل", "All")}</option>{Object.keys(REG_STATUS_LABEL).map((k) => <option key={k} value={k}>{t(REG_STATUS_LABEL[k][0], REG_STATUS_LABEL[k][1])}</option>)}</select></Field>
           <Field label={t("الموظف", "Assignee")}><select className={inputCls} value={assigneeF} onChange={(e) => setAssigneeF(e.target.value)}><option value="all">{t("الكل", "All")}</option>{agents.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
           <Field label={t("المنطقة", "Area")}><select className={inputCls} value={areaF} onChange={(e) => setAreaF(e.target.value)}><option value="all">{t("كل المناطق", "All areas")}</option>{regAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select></Field>
@@ -4385,7 +4385,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
                 <td className="px-3 text-slate-500" dir="ltr">{r.idNumber || "—"}</td>
                 <td className="px-3 text-slate-600">{agentName(r.assignee)}</td>
                 <td className="px-3"><Pill color={REG_STATUS_COLOR[st]}>{t(REG_STATUS_LABEL[st][0], REG_STATUS_LABEL[st][1])}</Pill></td>
-                <td className="px-3 text-xs text-slate-500">{regStepCount(r)}/{REG_STEPS.length}</td>
+                <td className="px-3 text-xs text-slate-500">{(r.steps && r.steps.docs_reviewed ? 1 : 0) + (r.converted ? 1 : 0)}/2</td>
                 <td className="px-3"><button onClick={() => setSel(r)} className="text-xs font-semibold" style={{ color: BRAND.blue }}>{t("متابعة", "Open")}</button></td>
               </tr>
             ); })}
@@ -4421,6 +4421,8 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
               <div><span className="text-slate-400 text-xs">{t("البريد", "Email")}</span><div dir="ltr">{r.email || "—"}</div></div>
               <div><span className="text-slate-400 text-xs">{t("الجنسية", "Nationality")}</span><div>{r.nationality || "—"}</div></div>
               <div><span className="text-slate-400 text-xs">{t("البطاقة/الجواز", "ID/Passport")}</span><div dir="ltr">{r.idNumber || "—"}</div></div>
+              <div><span className="text-slate-400 text-xs">{t("رقم الطلب", "Request no.")}</span><div dir="ltr" className="font-bold">{String(r.id || "").slice(0, 8).toUpperCase() || "—"}</div></div>
+              <div><span className="text-slate-400 text-xs">{t("وقت الإرسال", "Submitted at")}</span><div dir="ltr">{r.submittedAt || r.createdAt || "—"}</div></div>
               <div><span className="text-slate-400 text-xs">{t("الولاية", "Wilaya")}</span><div>{r.wilaya || "—"}</div></div>
               <div><span className="text-slate-400 text-xs">{t("المركبة", "Vehicle")}</span><div>{r.vehicleType || "—"}</div></div>
               <div><span className="text-slate-400 text-xs">{t("رخصة قيادة", "License")}</span><div>{r.hasLicense ? t("نعم", "Yes") : t("لا", "No")}</div></div>
