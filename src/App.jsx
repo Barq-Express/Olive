@@ -1557,6 +1557,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const [finPay, setFinPay] = useState(false);
   // تعديل تسديد المالية (احتياط): تاريخ / مبلغ / مرجع
   const [finEdit, setFinEdit] = useState(null);
+  const isFinSettle = (tx) => !!tx && (tx.finSettle === true || String(tx.reconLabel || "").includes("المالية"));
   const saveFinEdit = () => {
     if (!finEdit) return;
     const amt = Number(finEdit.amount);
@@ -1600,7 +1601,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     const amt = Number(finAmount);
     if (isNaN(amt) || amt <= 0) { setFinErr(t("أدخل مبلغاً صحيحاً أكبر من صفر", "Enter a valid amount > 0")); return; }
     const me = (user && (user.name || user.email)) || "";
-    const tx = { id: uid(), riderId: rider.id, amount: +amt.toFixed(3), reference: finRef.trim() || ("FIN-" + Date.now()), date: finDate, receipt: finReceipts[0] || "", receipts: finReceipts, status: "Approved", reconLabel: "💰 تسديد عبر المالية", decidedBy: me, submittedAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
+    const tx = { id: uid(), riderId: rider.id, amount: +amt.toFixed(3), reference: finRef.trim() || ("FIN-" + Date.now()), date: finDate, receipt: finReceipts[0] || "", receipts: finReceipts, status: "Approved", reconLabel: "💰 تسديد عبر المالية", finSettle: true, decidedBy: me, submittedAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
     save({ ...db, transfers: [...db.transfers, tx] });
     setFinPay(false); setFinId(""); setFinAmount(""); setFinDate(todayStr()); setFinRef(""); setFinReceipts([]); setFinErr("");
     if (onRefresh) onRefresh();
@@ -1702,7 +1703,9 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   };
   const applyDecision = (id, status, reason) => {
     const me = (user && (user.name || user.email)) || "";
-    const label = status === "Approved" ? tr("قبول يدوي") : tr("رفض يدوي");
+    const curTx = db.transfers.find((x) => x.id === id);
+    // التسديد عبر المالية يحتفظ بتصنيفه عند إعادة القبول بعد التراجع
+    const label = status === "Approved" ? (isFinSettle(curTx) ? "💰 تسديد عبر المالية" : tr("قبول يدوي")) : tr("رفض يدوي");
     const at = new Date().toISOString().slice(0, 16).replace("T", " ");
     setDecidingId(id); // مؤشّر بصري فقط (بدون كتابة كل القائمة حتى لا تُمسح إيصالات المناديب)
     supabase.rpc("admin_decide_transfer", { p_id: id, p_status: status, p_by: me, p_label: label, p_reason: reason || "" }).then(({ error }) => {
@@ -1899,7 +1902,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                           <button onClick={() => revertDecision(tf.id)} disabled={decidingId === tf.id} title={t("تراجع عن القرار", "Revert decision")} className="text-slate-400 hover:text-amber-600 disabled:opacity-30"><RefreshCw size={14} /></button>
                         </span>
                       ) : <span className="text-[10px] text-slate-400">{agentName(tf.riderId)}</span>}
-                      {isFinanceU && tf.reconLabel && String(tf.reconLabel).includes("المالية") ? <button onClick={() => setFinEdit({ id: tf.id, date: String(tf.date || "").slice(0, 10), amount: String(tf.amount), reference: tf.reference || "" })} title={t("تعديل التسديد", "Edit settlement")} className="text-slate-400 hover:text-slate-700"><Pencil size={15} /></button> : null}
+                      {isFinanceU && isFinSettle(tf) ? <button onClick={() => setFinEdit({ id: tf.id, date: String(tf.date || "").slice(0, 10), amount: String(tf.amount), reference: tf.reference || "" })} title={t("تعديل التسديد", "Edit settlement")} className="text-slate-400 hover:text-slate-700"><Pencil size={15} /></button> : null}
                       {tf.auditLog && tf.auditLog.length > 0 && <button onClick={() => setViewAudit(tf)} title={t("سجل التدقيق", "Audit log")} className="text-slate-400 hover:text-slate-700"><Clock size={15} /></button>}
                     </div>
                   </td>
