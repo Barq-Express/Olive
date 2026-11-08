@@ -4452,7 +4452,6 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
                 {r.needsFix && <Field label={t("وش المطلوب تصحيحه؟ (مثلاً صورة غير واضحة)", "What needs fixing? (e.g. unclear photo)")}><input className={inputCls} value={r.fixNote || ""} onChange={(e) => upd(r.id, { fixNote: e.target.value })} /></Field>}
               </div>
               <div className="grid md:grid-cols-3 gap-2 mt-3">
-                <Field label="Username"><input className={inputCls} dir="ltr" value={r.username || ""} onChange={(e) => upd(r.id, { username: e.target.value })} /></Field>
                 <Field label="Password"><input className={inputCls} dir="ltr" value={r.password || ""} onChange={(e) => upd(r.id, { password: e.target.value })} /></Field>
                 <Field label="Driver ID"><input className={inputCls} dir="ltr" value={r.driverId || ""} onChange={(e) => upd(r.id, { driverId: e.target.value })} /></Field>
               </div>
@@ -5051,7 +5050,8 @@ const REG_STEPS = [
   { key: "ready", ar: "جاهز للتسجيل النهائي", en: "Ready for final registration" },
 ];
 const VEHICLES = [["motorcycle", "دراجة نارية", "Motorcycle"], ["car", "سيارة", "Car"], ["bicycle", "دراجة هوائية", "Bicycle"], ["truck", "شاحنة صغيرة", "Pickup"]];
-const regStepsDone = (r) => REG_STEPS.every((s) => r.steps && r.steps[s.key]);
+// التحويل يصير بعد "تمت المراجعة" فقط
+const regStepsDone = (r) => !!(r.steps && r.steps.docs_reviewed);
 const regStepCount = (r) => REG_STEPS.filter((s) => r.steps && r.steps[s.key]).length;
 const regStatus = (r) => {
   if (r.rejected) return "rejected";
