@@ -1555,6 +1555,18 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const isFinanceU = user && (user.role === "Finance" || user.role === "Admin"); // المالية أو الأدمن
   // نموذج تسديد المالية نيابة عن المندوب (للمبالغ السابقة)
   const [finPay, setFinPay] = useState(false);
+  // تعديل تسديد المالية (احتياط): تاريخ / مبلغ / مرجع
+  const [finEdit, setFinEdit] = useState(null);
+  const saveFinEdit = () => {
+    if (!finEdit) return;
+    const amt = Number(finEdit.amount);
+    if (isNaN(amt) || amt <= 0) return;
+    const me = (user && (user.name || user.email)) || "";
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    save({ ...db, transfers: db.transfers.map((x) => x.id === finEdit.id ? { ...x, date: finEdit.date, amount: +amt.toFixed(3), reference: finEdit.reference.trim(), editedBy: me, editedAt: stamp } : x) });
+    setFinEdit(null);
+    if (onRefresh) onRefresh();
+  };
   const [finId, setFinId] = useState("");
   const [finAmount, setFinAmount] = useState("");
   const [finDate, setFinDate] = useState(todayStr());
@@ -1870,7 +1882,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                   <td className="px-3 text-slate-500">{riderCompanyId(tf.riderId)}</td>
                   <td className="px-3">{omr(tf.amount)}</td>
                   <td className="px-3" dir="ltr">{tf.reference}</td>
-                  <td className="px-3 text-slate-500">{tf.date}{tf.submittedAt ? <div className="text-[10px] text-slate-400" dir="ltr">{LANG === "en" ? "Sent: " : "رُفع: "}{tf.submittedAt}</div> : null}</td>
+                  <td className="px-3 text-slate-500">{tf.date}{tf.submittedAt ? <div className="text-[10px] text-slate-400" dir="ltr">{LANG === "en" ? "Sent: " : "رُفع: "}{tf.submittedAt}</div> : null}{tf.editedBy ? <div className="text-[10px] text-amber-600" dir="ltr">{t("عُدّل", "Edited")}: {tf.editedBy} · {tf.editedAt}</div> : null}</td>
                   <td className="px-3">{tf.receipt ? <button onClick={() => setViewReceipt(tf)} className="text-slate-500 hover:text-slate-800"><Eye size={16} /></button> : "—"}</td>
                   <td className="px-3">
                     {tf.reconLabel ? <Pill color={tf.status === "Approved" ? "#0f9d58" : tf.status === "Rejected" ? "#c0341d" : "#d97706"}>{tr(tf.reconLabel)}</Pill> : <Pill color="#d97706">{tr("قيد المراجعة")}</Pill>}
@@ -1887,6 +1899,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                           <button onClick={() => revertDecision(tf.id)} disabled={decidingId === tf.id} title={t("تراجع عن القرار", "Revert decision")} className="text-slate-400 hover:text-amber-600 disabled:opacity-30"><RefreshCw size={14} /></button>
                         </span>
                       ) : <span className="text-[10px] text-slate-400">{agentName(tf.riderId)}</span>}
+                      {isFinanceU && tf.reconLabel && String(tf.reconLabel).includes("المالية") ? <button onClick={() => setFinEdit({ id: tf.id, date: String(tf.date || "").slice(0, 10), amount: String(tf.amount), reference: tf.reference || "" })} title={t("تعديل التسديد", "Edit settlement")} className="text-slate-400 hover:text-slate-700"><Pencil size={15} /></button> : null}
                       {tf.auditLog && tf.auditLog.length > 0 && <button onClick={() => setViewAudit(tf)} title={t("سجل التدقيق", "Audit log")} className="text-slate-400 hover:text-slate-700"><Clock size={15} /></button>}
                     </div>
                   </td>
@@ -1996,6 +2009,16 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
             <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setAdjFor(null)}>{tr("إلغاء")}</Btn><Btn onClick={submitAdj}>{t("حفظ التعديل", "Save")}</Btn></div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!finEdit} onClose={() => setFinEdit(null)} title={t("تعديل تسديد المالية", "Edit finance settlement")}>
+        {finEdit && <div className="space-y-3">
+          <Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={finEdit.date} onChange={(e) => setFinEdit({ ...finEdit, date: e.target.value })} /></Field>
+          <Field label={t("المبلغ", "Amount")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={finEdit.amount} onChange={(e) => setFinEdit({ ...finEdit, amount: e.target.value })} /></Field>
+          <Field label={t("المرجع / الملاحظة", "Reference / note")}><input className={inputCls} dir="ltr" value={finEdit.reference} onChange={(e) => setFinEdit({ ...finEdit, reference: e.target.value })} /></Field>
+          {!(Number(finEdit.amount) > 0) && <p className="text-xs text-red-600">{t("أدخل مبلغاً أكبر من صفر", "Enter an amount > 0")}</p>}
+          <Btn onClick={saveFinEdit}>{t("حفظ التعديل", "Save changes")}</Btn>
+        </div>}
       </Modal>
 
       <Modal open={finPay} onClose={() => setFinPay(false)} title={t("تسديد عبر المالية (نيابة عن المندوب)", "Finance Settlement (on rider's behalf)")}>
