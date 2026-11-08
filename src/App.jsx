@@ -1559,22 +1559,27 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const [finAmount, setFinAmount] = useState("");
   const [finDate, setFinDate] = useState(todayStr());
   const [finRef, setFinRef] = useState("");
-  const [finReceipt, setFinReceipt] = useState("");
+  const [finReceipts, setFinReceipts] = useState([]);
   const [finUp, setFinUp] = useState(false);
   const [finErr, setFinErr] = useState("");
   const findRiderByAnyId = (id) => { const s = String(id || "").trim(); if (!s) return null; return db.riders.find((r) => String(r.companyId || "").trim() === s) || db.riders.find((r) => String(r.civil || "").trim() === s) || db.riders.find((r) => String(r.phone || "").replace(/\D/g, "") === s.replace(/\D/g, "")); };
   const finMatch = findRiderByAnyId(finId);
+  // يقبل أكثر من صورة/PDF: كل ملف يترفع ويُضاف للقائمة
   const finUploadReceipt = (e) => {
-    const f = e.target.files[0]; if (!f) return; setFinErr("");
-    const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name); const isImg = f.type.startsWith("image/");
-    if (!isPdf && !isImg) { setFinErr(t("الملف يجب صورة أو PDF", "File must be image or PDF")); return; }
-    if (f.size > 15 * 1024 * 1024) { setFinErr(t("حجم الملف كبير (حد 15MB)", "File too large (15MB)")); return; }
-    setFinUp(true);
-    const path = "fin-" + Date.now() + "." + (isPdf ? "pdf" : "jpg");
-    supabase.storage.from("receipts").upload(path, f, { contentType: f.type, upsert: true }).then(({ error }) => {
-      setFinUp(false);
-      if (error) { setFinErr(t("تعذّر رفع الإيصال", "Upload failed")); return; }
-      const { data } = supabase.storage.from("receipts").getPublicUrl(path); setFinReceipt((data && data.publicUrl) || "");
+    const files = Array.from(e.target.files || []); e.target.value = "";
+    if (files.length === 0) return; setFinErr("");
+    files.forEach((f, i) => {
+      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name); const isImg = f.type.startsWith("image/");
+      if (!isPdf && !isImg) { setFinErr(t("الملف يجب صورة أو PDF", "File must be image or PDF")); return; }
+      if (f.size > 15 * 1024 * 1024) { setFinErr(t("حجم الملف كبير (حد 15MB)", "File too large (15MB)")); return; }
+      setFinUp(true);
+      const path = "fin-" + Date.now() + "-" + i + "-" + Math.random().toString(36).slice(2, 6) + "." + (isPdf ? "pdf" : "jpg");
+      supabase.storage.from("receipts").upload(path, f, { contentType: f.type, upsert: true }).then(({ error }) => {
+        setFinUp(false);
+        if (error) { setFinErr(t("تعذّر رفع الإيصال", "Upload failed")); return; }
+        const { data } = supabase.storage.from("receipts").getPublicUrl(path);
+        if (data && data.publicUrl) setFinReceipts((p) => [...p, data.publicUrl]);
+      });
     });
   };
   const submitFinPay = () => {
@@ -1583,9 +1588,9 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     const amt = Number(finAmount);
     if (isNaN(amt) || amt <= 0) { setFinErr(t("أدخل مبلغاً صحيحاً أكبر من صفر", "Enter a valid amount > 0")); return; }
     const me = (user && (user.name || user.email)) || "";
-    const tx = { id: uid(), riderId: rider.id, amount: +amt.toFixed(3), reference: finRef.trim() || ("FIN-" + Date.now()), date: finDate, receipt: finReceipt || "", status: "Approved", reconLabel: "💰 تسديد عبر المالية", decidedBy: me, submittedAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
+    const tx = { id: uid(), riderId: rider.id, amount: +amt.toFixed(3), reference: finRef.trim() || ("FIN-" + Date.now()), date: finDate, receipt: finReceipts[0] || "", receipts: finReceipts, status: "Approved", reconLabel: "💰 تسديد عبر المالية", decidedBy: me, submittedAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
     save({ ...db, transfers: [...db.transfers, tx] });
-    setFinPay(false); setFinId(""); setFinAmount(""); setFinDate(todayStr()); setFinRef(""); setFinReceipt(""); setFinErr("");
+    setFinPay(false); setFinId(""); setFinAmount(""); setFinDate(todayStr()); setFinRef(""); setFinReceipts([]); setFinErr("");
     if (onRefresh) onRefresh();
   };
   const visibleRiders = db.riders.filter((r) => r.company === company); // الجميع يشوف كل المناديب
@@ -1773,7 +1778,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h3 className="font-bold text-slate-800">{t("مستحقات COD على المناديب", "Rider COD Dues")} — {cLabel(company)}</h3>
           <div className="flex gap-2 flex-wrap">
-            {isFinanceU && <Btn kind="ghost" size="sm" onClick={() => { setFinPay(true); setFinId(""); setFinAmount(""); setFinDate(todayStr()); setFinRef(""); setFinReceipt(""); setFinErr(""); }}><Banknote size={14} /> {t("تسديد عبر المالية", "Finance Settlement")}</Btn>}
+            {isFinanceU && <Btn kind="ghost" size="sm" onClick={() => { setFinPay(true); setFinId(""); setFinAmount(""); setFinDate(todayStr()); setFinRef(""); setFinReceipts([]); setFinErr(""); }}><Banknote size={14} /> {t("تسديد عبر المالية", "Finance Settlement")}</Btn>}
             {isAdmin && <Btn kind="ghost" size="sm" onClick={openAssign}><Users size={14} /> {t("توزيع المناديب على الموظفين", "Distribute riders")}</Btn>}
             {isAdmin && <Btn kind="ghost" size="sm" onClick={() => setShowMove(true)}><Users size={14} /> {t("نقل مناديب بين الموظفين", "Move riders")}</Btn>}
             <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-44" placeholder={t("اسم / رقم / ID", "name / phone / ID")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
@@ -2005,9 +2010,9 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
             <Field label={t("تاريخ التسديد", "Settlement date")}><input type="date" className={inputCls} value={finDate} onChange={(e) => setFinDate(e.target.value)} /></Field>
           </div>
           <Field label={t("الرقم المرجعي (اختياري)", "Reference (optional)")}><input className={inputCls} dir="ltr" value={finRef} onChange={(e) => setFinRef(e.target.value)} /></Field>
-          <Field label={t("إيصال التسديد (صورة أو PDF)", "Receipt (image or PDF)")}><input className={inputCls} type="file" accept="image/*,application/pdf" onChange={finUploadReceipt} /></Field>
-          {finUp && <p className="text-xs text-slate-500">{t("جارٍ رفع الإيصال...", "Uploading...")}</p>}
-          {finReceipt && !finUp && <p className="text-xs font-semibold" style={{ color: "#0f9d58" }}>✓ {t("تم رفع الإيصال", "Receipt uploaded")}</p>}
+          <Field label={t("إيصالات التسديد (صور أو PDF، يقبل أكثر من ملف)", "Receipts (images or PDFs, multiple allowed)")}><input className={inputCls} type="file" multiple accept="image/*,application/pdf" onChange={finUploadReceipt} /></Field>
+          {finUp && <p className="text-xs text-slate-500">{t("جارٍ رفع الإيصالات...", "Uploading...")}</p>}
+          {finReceipts.length > 0 && !finUp && <p className="text-xs font-semibold" style={{ color: "#0f9d58" }}>✓ {t("تم رفع", "Uploaded")} {finReceipts.length} {t("إيصال", "receipt(s)")}</p>}
           {finErr && <p className="text-xs text-red-600">{finErr}</p>}
           <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setFinPay(false)}>{tr("إلغاء")}</Btn><Btn onClick={submitFinPay} disabled={finUp || !finMatch}>{t("تسجيل التسديد", "Record Settlement")}</Btn></div>
         </div>
@@ -2112,8 +2117,12 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
               </div>
             )}
             <div className="flex-1 overflow-auto p-4">
-              {isPdf ? <a href={rc} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold" style={{ color: BRAND.blue }}><FileText size={18} /> {t("فتح ملف PDF في نافذة جديدة", "Open PDF in new tab")}</a>
-                     : <img src={rc} alt={tr("إيصال")} className="w-full rounded-lg border border-slate-200" />}
+              {(typeof viewReceipt !== "string" && viewReceipt.receipts && viewReceipt.receipts.length ? viewReceipt.receipts : [rc]).map((u, idx) => (
+                <div key={u + idx} className="mb-4">
+                  {/\.pdf($|\?)/i.test(u || "") ? <a href={u} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold" style={{ color: BRAND.blue }}><FileText size={18} /> {t("فتح ملف PDF", "Open PDF")} {idx + 1}</a>
+                    : <img src={u} alt={tr("إيصال")} className="w-full rounded-lg border border-slate-200" />}
+                </div>
+              ))}
             </div>
           </div>
         </>
