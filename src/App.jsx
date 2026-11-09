@@ -1599,7 +1599,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     const rider = findRiderByAnyId(finId);
     if (!rider) { setFinErr(t("لم يُعثر على مندوب بهذا الـ ID", "No rider found with this ID")); return; }
     const amt = Number(finAmount);
-    if (isNaN(amt) || amt <= 0) { setFinErr(t("أدخل مبلغاً صحيحاً أكبر من صفر", "Enter a valid amount > 0")); return; }
+    if (isNaN(amt) || amt < 0) { setFinErr(t("أدخل مبلغاً صحيحاً (0 أو أكثر)", "Enter a valid amount (0 or more)")); return; }
     const me = (user && (user.name || user.email)) || "";
     const tx = { id: uid(), riderId: rider.id, amount: +amt.toFixed(3), reference: finRef.trim() || ("FIN-" + Date.now()), date: finDate, receipt: finReceipts[0] || "", receipts: finReceipts, status: "Approved", reconLabel: "💰 تسديد عبر المالية", finSettle: true, decidedBy: me, submittedAt: new Date().toISOString().slice(0, 16).replace("T", " ") };
     save({ ...db, transfers: [...db.transfers, tx] });
