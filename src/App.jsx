@@ -713,7 +713,8 @@ function riderMoneyRange(db, riderId, from, to) {
   const codToTransfer = orderCod + codAdj;
   const transferred = db.transfers.filter((t) => t.riderId === riderId && t.status === "Approved" && inRange(t.date)).reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const deducted = db.transfers.filter((t) => t.riderId === riderId && t.status !== "Rejected" && inRange(t.date)).reduce((a, t) => a + (Number(t.amount) || 0), 0);
-  const codDed = (db.codDeductions || []).filter((d) => d.riderId === riderId && d.status !== "rejected" && inRange((d.month || String(d.at || "").slice(0, 7)) + "-15")).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  // الخصم يُحسب حسب تاريخ تسجيله (at)، وإذا ما فيه تاريخ نرجع لمنتصف شهره
+  const codDed = (db.codDeductions || []).filter((d) => d.riderId === riderId && d.status !== "rejected" && inRange(d.date || ((d.month || "") + "-15"))).reduce((s, d) => s + (Number(d.amount) || 0), 0);
   return { orders, codToTransfer: r3(codToTransfer), transferred: r3(transferred), deducted: r3(deducted), codDed: r3(codDed), owed: r3(codToTransfer - deducted - codDed), pendingAmt: r3(deducted - transferred) };
 }
 
@@ -1637,13 +1638,14 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const [dedMonth, setDedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [dedReason, setDedReason] = useState("");
   const [dedErr, setDedErr] = useState("");
-  const openDed = (r) => { setDedFor({ rider: r }); setDedAmount(""); setDedMonth(new Date().toISOString().slice(0, 7)); setDedReason(""); setDedErr(""); };
+  const [dedDate, setDedDate] = useState(todayStr()); // تاريخ الخصم يختاره الأدمن
+  const openDed = (r) => { setDedFor({ rider: r }); setDedAmount(""); setDedMonth(new Date().toISOString().slice(0, 7)); setDedDate(todayStr()); setDedReason(""); setDedErr(""); };
   const submitDed = () => {
     const amt = Number(dedAmount);
     if (isNaN(amt) || amt <= 0) { setDedErr(t("أدخل مبلغاً صحيحاً أكبر من صفر", "Enter a valid amount > 0")); return; }
     if (!dedReason.trim()) { setDedErr(t("السبب مطلوب", "Reason required")); return; }
     const me = (user && (user.name || user.email)) || "";
-    const rec = { id: uid(), riderId: dedFor.rider.id, company, amount: +amt.toFixed(3), month: dedMonth, reason: dedReason.trim(), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "), status: "approved" };
+    const rec = { id: uid(), riderId: dedFor.rider.id, company, amount: +amt.toFixed(3), date: dedDate, month: dedDate.slice(0, 7), reason: dedReason.trim(), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "), status: "approved" };
     save({ ...db, codDeductions: [...(db.codDeductions || []), rec] });
     setDedFor(null);
   };
@@ -2052,7 +2054,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
             <div className="p-3 rounded-lg text-xs" style={{ background: "#f0fdf4", color: "#166534" }}>{t("الخصم يُستقطع من راتب المندوب ويقلّل مستحق COD تلقائياً — بدون تعديل الشيت الأصلي.", "The deduction is taken from the rider's salary and reduces outstanding COD automatically — without editing the original sheet.")}</div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("مبلغ الخصم", "Deduction amount")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={dedAmount} onChange={(e) => setDedAmount(e.target.value)} placeholder="0.000" /></Field>
-              <Field label={t("الشهر", "Month")}><input type="month" className={inputCls} value={dedMonth} onChange={(e) => setDedMonth(e.target.value)} /></Field>
+              <Field label={t("تاريخ الخصم", "Deduction date")}><input type="date" className={inputCls} value={dedDate} onChange={(e) => setDedDate(e.target.value)} /></Field>
             </div>
             {dedAmount !== "" && !isNaN(Number(dedAmount)) && Number(dedAmount) > 0 && (
               <div className="text-xs p-2 rounded-lg" style={{ background: "#eef2ff" }}>
