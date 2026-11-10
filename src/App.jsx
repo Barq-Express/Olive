@@ -1639,6 +1639,18 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const [dedReason, setDedReason] = useState("");
   const [dedErr, setDedErr] = useState("");
   const [dedDate, setDedDate] = useState(todayStr()); // تاريخ الخصم يختاره الأدمن
+  // تعديل خصم (احتياط): تاريخ / مبلغ / سبب
+  const [dedEdit, setDedEdit] = useState(null);
+  const saveDedEdit = () => {
+    if (!dedEdit) return;
+    const amt = Number(dedEdit.amount);
+    if (isNaN(amt) || amt <= 0 || !dedEdit.date) return;
+    const me = (user && (user.name || user.email)) || "";
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    save({ ...db, codDeductions: (db.codDeductions || []).map((d) => d.id === dedEdit.id ? { ...d, date: dedEdit.date, month: dedEdit.date.slice(0, 7), amount: +amt.toFixed(3), reason: dedEdit.reason.trim(), editedBy: me, editedAt: stamp } : d) });
+    setDedEdit(null);
+    if (onRefresh) onRefresh();
+  };
   const openDed = (r) => { setDedFor({ rider: r }); setDedAmount(""); setDedMonth(new Date().toISOString().slice(0, 7)); setDedDate(todayStr()); setDedReason(""); setDedErr(""); };
   const submitDed = () => {
     const amt = Number(dedAmount);
@@ -1989,7 +2001,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                         <td className="px-3 font-semibold text-slate-800">{riderName(r.riderId)}</td>
                         <td className="px-3">{kindPill(r.kind)}</td>
                         <td className="px-3 font-semibold" style={{ color: r.amt < 0 ? "#c0341d" : "#0f9d58" }}>{r.amt > 0 ? "+" : ""}{omr(r.amt)}</td>
-                        <td className="px-3 text-slate-600" style={{ maxWidth: 260 }}>{r.reason || "—"}{r.decidedBy ? <div className="text-[10px] text-slate-400">{t("اعتمده", "Approved by")}: {r.decidedBy}</div> : null}</td>
+                        <td className="px-3 text-slate-600" style={{ maxWidth: 260 }}>{r.reason || "—"}{r.kind === "ded" && isFinanceU ? <button onClick={() => { const dd = (db.codDeductions || []).find((d) => d.id === r.id) || {}; setDedEdit({ id: r.id, date: dd.date || String(dd.at || "").slice(0, 10) || ((dd.month || "") + "-01"), amount: String(Math.abs(r.amt)), reason: dd.reason || "" }); }} title={t("تعديل الخصم", "Edit deduction")} className="ms-2 text-slate-400 hover:text-slate-700"><Pencil size={13} /></button> : null}{r.decidedBy ?<div className="text-[10px] text-slate-400">{t("اعتمده", "Approved by")}: {r.decidedBy}</div> : null}</td>
                         <td className="px-3 text-slate-600">{r.by}</td>
                         <td className="px-3">{statPill(r.status)}</td>
                       </tr>
@@ -2045,6 +2057,15 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
           {finErr && <p className="text-xs text-red-600">{finErr}</p>}
           <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setFinPay(false)}>{tr("إلغاء")}</Btn><Btn onClick={submitFinPay} disabled={finUp || !finMatch}>{t("تسجيل التسديد", "Record Settlement")}</Btn></div>
         </div>
+      </Modal>
+
+      <Modal open={!!dedEdit} onClose={() => setDedEdit(null)} title={t("تعديل خصم الراتب", "Edit salary deduction")}>
+        {dedEdit && <div className="space-y-3">
+          <Field label={t("تاريخ الخصم", "Deduction date")}><input type="date" className={inputCls} value={dedEdit.date} onChange={(e) => setDedEdit({ ...dedEdit, date: e.target.value })} /></Field>
+          <Field label={t("مبلغ الخصم", "Deduction amount")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={dedEdit.amount} onChange={(e) => setDedEdit({ ...dedEdit, amount: e.target.value })} /></Field>
+          <Field label={t("السبب", "Reason")}><input className={inputCls} value={dedEdit.reason} onChange={(e) => setDedEdit({ ...dedEdit, reason: e.target.value })} /></Field>
+          <Btn onClick={saveDedEdit}>{t("حفظ التعديل", "Save changes")}</Btn>
+        </div>}
       </Modal>
 
       <Modal open={!!dedFor} onClose={() => setDedFor(null)} title={t("خصم من الراتب (سداد COD)", "Salary Deduction (COD)")}>
