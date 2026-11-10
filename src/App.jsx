@@ -1561,7 +1561,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const saveFinEdit = () => {
     if (!finEdit) return;
     const amt = Number(finEdit.amount);
-    if (isNaN(amt) || amt <= 0) return;
+    if (isNaN(amt) || amt < 0) return;
     const me = (user && (user.name || user.email)) || "";
     const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
     save({ ...db, transfers: db.transfers.map((x) => x.id === finEdit.id ? { ...x, date: finEdit.date, amount: +amt.toFixed(3), reference: finEdit.reference.trim(), finSettle: !!finEdit.fin, reconLabel: finEdit.fin ? "💰 تسديد عبر المالية" : (isFinSettle(x) ? tr("قبول يدوي") : x.reconLabel), editedBy: me, editedAt: stamp } : x) });
@@ -2020,7 +2020,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
           <Field label={t("المبلغ", "Amount")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={finEdit.amount} onChange={(e) => setFinEdit({ ...finEdit, amount: e.target.value })} /></Field>
           <Field label={t("المرجع / الملاحظة", "Reference / note")}><input className={inputCls} dir="ltr" value={finEdit.reference} onChange={(e) => setFinEdit({ ...finEdit, reference: e.target.value })} /></Field>
           <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!finEdit.fin} onChange={(e) => setFinEdit({ ...finEdit, fin: e.target.checked })} /> {t("تسديد عبر المالية", "Finance settlement")}</label>
-          {!(Number(finEdit.amount) > 0) &&<p className="text-xs text-red-600">{t("أدخل مبلغاً أكبر من صفر", "Enter an amount > 0")}</p>}
+          {!(Number(finEdit.amount) >= 0) && <p className="text-xs text-red-600">{t("أدخل مبلغاً (0 أو أكثر)", "Enter an amount (0 or more)")}</p>}
           <Btn onClick={saveFinEdit}>{t("حفظ التعديل", "Save changes")}</Btn>
         </div>}
       </Modal>
