@@ -4479,7 +4479,11 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
               <div className="space-y-2">
                 <button onClick={() => toggleStep(r, "docs_reviewed")} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
                   <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.steps && r.steps.docs_reviewed ? "#0f9d58" : "#e2e8f0", color: "#fff" }}>{r.steps && r.steps.docs_reviewed ? "✓" : ""}</span>
-                  <span className="text-sm font-semibold text-slate-800">{t("تمت المراجعة (يظهر في الشيت لإرساله لسنونو)", "Reviewed (appears in the sheet for Snoonu)")}</span>
+                  <span className="text-sm font-semibold text-slate-800">{t("تمت المراجعة", "Reviewed")}</span>
+                </button>
+                <button onClick={() => toggleStep(r, "training")} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
+                  <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.steps && r.steps.training ? "#0f9d58" : "#e2e8f0", color: "#fff" }}>{r.steps && r.steps.training ? "✓" : ""}</span>
+                  <span className="text-sm font-semibold text-slate-800">{t("تم حضور الاجتماع (Training Completed) — بعدها يُصدَّر لسنونو", "Training completed (Training Completed) — then it can be exported to Snoonu")}</span>
                 </button>
                 <button onClick={() => upd(r.id, { needsFix: !r.needsFix, fixNote: r.needsFix ? "" : (r.fixNote || "") })} className="w-full flex items-center gap-2 text-right p-2 rounded-lg hover:bg-slate-50">
                   <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.needsFix ? "#d97706" : "#e2e8f0", color: "#fff" }}>{r.needsFix ? "!" : ""}</span>
@@ -5087,13 +5091,13 @@ const REG_STEPS = [
 ];
 const VEHICLES = [["motorcycle", "دراجة نارية", "Motorcycle"], ["car", "سيارة", "Car"], ["bicycle", "دراجة هوائية", "Bicycle"], ["truck", "شاحنة صغيرة", "Pickup"]];
 // التحويل يصير بعد "تمت المراجعة" فقط
-const regStepsDone = (r) => !!(r.steps && r.steps.docs_reviewed);
+const regStepsDone = (r) => !!(r.steps && r.steps.docs_reviewed && r.steps.training);
 const regStepCount = (r) => REG_STEPS.filter((s) => r.steps && r.steps[s.key]).length;
 const regStatus = (r) => {
   if (r.rejected) return "rejected";
   if (r.converted) return "completed";
   if (r.needsFix) return "needs_fix";            // يحتاج تصحيح: الموظف يتواصل مع المندوب، ما يُصدَّر لسنونو
-  if (r.steps && r.steps.docs_reviewed) return "ready"; // تمت المراجعة = يظهر في الشيت ويُرسل لسنونو
+  if (r.steps && r.steps.docs_reviewed && r.steps.training) return "ready"; // تمت المراجعة + حضور الاجتماع = يظهر في الشيت ويُرسل لسنونو
   if (regStepCount(r) > 0) return "in_progress";
   return "new";
 };
