@@ -1518,7 +1518,7 @@ function OrdersTab({ company, db, save, user }) {
               <div className="flex-1 min-w-[200px]"><Field label={t("إضافة مندوب للشيت", "Add rider to sheet")}>
                 <select className={inputCls} value={addImpRider} onChange={(e) => setAddImpRider(e.target.value)}>
                   <option value="">{t("— اختر مندوب —", "— choose rider —")}</option>
-                  {companyRiders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""}</option>)}
+                  {db.riders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""} · {cLabel(rr.company)}{rr.status && rr.status !== "Active" ? " (" + rr.status + ")" : ""}</option>)}
                 </select>
               </Field></div>
               <Btn kind="ghost" onClick={addRiderToImp} disabled={!addImpRider}><Plus size={14} /> {t("إضافة", "Add")}</Btn>
@@ -4364,6 +4364,14 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
     setRejectFor(null); setRejectReason(""); setRejectErr(""); setSel(null);
   };
   const unreject = (r) => { if (window.confirm(t("إعادة تفعيل هذا الطلب؟", "Reactivate this request?"))) upd(r.id, { rejected: false, rejectReason: "" }); };
+  // تراجع عن التحويل إلى مندوب: يحذف المندوب المُنشأ ويرجّع الطلب لحالة «جاهز»
+  const undoConvert = (r) => {
+    const rid = r.convertedRiderId || ((db.riders.find((x) => (x.phone || "") === (r.phone || "") && (x.name || "") === (r.fullName || "")) || {}).id);
+    const rec = db.riders.find((x) => x.id === rid);
+    if (!window.confirm(t("التراجع عن التحويل؟ راح يُحذف المندوب «" + (rec ? rec.name : r.fullName) + "» من قائمة المناديب ويرجع الطلب كـ «جاهز».", "Undo conversion? The rider will be removed from the riders list and the request goes back to Ready."))) return;
+    if (rec && (db.transfers || []).some((x) => x.riderId === rid)) { alert(t("ما نقدر نتراجع: هذا المندوب عنده تحويلات مسجلة.", "Cannot undo: this rider has recorded transfers.")); return; }
+    save({ ...db, riders: rid ? db.riders.filter((x) => x.id !== rid) : db.riders, registrations: regs.map((x) => (x.id === r.id ? { ...x, converted: false, convertedAt: null, convertedRiderId: null } : x)) });
+  };
   const convert = (r) => {
     if (!regStepsDone(r)) return;
     const rider = {
@@ -4374,7 +4382,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
     };
     const pickRA = makeAgentPicker(db, rider.company); const riderA = { ...rider, codAgent: rider.codAgent || pickRA() };
     // تحديث محلي فوري + كتابة موجّهة ذرّية (تتفادى فشل حفظ كل البيانات)
-    save({ ...db, riders: [...db.riders, riderA], registrations: regs.map((x) => (x.id === r.id ? { ...x, converted: true, convertedAt: todayStr() } : x)) });
+    save({ ...db, riders: [...db.riders, riderA], registrations: regs.map((x) => (x.id === r.id ? { ...x, converted: true, convertedAt: todayStr(), convertedRiderId: riderA.id } : x)) });
     if (!readOnly) supabase.rpc("convert_registration", { p_reg_id: r.id, p_rider: riderA }).then(({ error }) => {
       if (error) alert(tr("تعذّر حفظ الاعتماد، حاول مرة أخرى"));
     });
@@ -4546,7 +4554,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
                   : <button onClick={() => { setRejectFor(r); setRejectReason(""); setRejectErr(""); }} className="text-xs font-semibold text-red-600">{t("رفض الطلب", "Reject request")}</button>}
               </div>
               {r.converted
-                ? <Pill color="#0f9d58">{t("تم التحويل إلى مندوب ✓", "Converted to driver ✓")}</Pill>
+                ? <div className="flex items-center gap-2 flex-wrap"><Pill color="#0f9d58">{t("تم التحويل إلى مندوب ✓", "Converted to driver ✓")}</Pill>{!readOnly && <button onClick={() => undoConvert(r)} className="text-xs font-semibold text-amber-700 underline">{t("تراجع عن التحويل", "Undo conversion")}</button>}</div>
                 : (!readOnly && !r.rejected && <Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn>)}
             </div>
             {!r.converted && !regStepsDone(r) && <p className="text-xs text-slate-400 text-left">{t("أكمل جميع الخطوات لتفعيل التحويل.", "Complete all steps to enable conversion.")}</p>}
