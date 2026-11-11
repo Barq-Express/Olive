@@ -1360,6 +1360,13 @@ function OrdersTab({ company, db, save, user }) {
     save({ ...db, imports: [...db.imports, imp], riders });
   };
   const [editImp, setEditImp] = useState(null);
+  const [addImpRider, setAddImpRider] = useState(""); // إضافة مندوب لشيت موجود (بدون حذف الشيت)
+  const addRiderToImp = () => {
+    const rr = db.riders.find((x) => x.id === addImpRider);
+    if (!rr || !editImp || editImp.results.some((x) => x.riderId === rr.id)) return;
+    setEditImp((e) => ({ ...e, results: [...e.results, { riderId: rr.id, name: rr.name, orders: 0, cod: 0, hours: 0, accept: "", transferDue: 0 }] }));
+    setAddImpRider("");
+  };
   // سجل الطلبات: مندوب + مدة
   const [hRider, setHRider] = useState("all");
   const [hRiderQ, setHRiderQ] = useState("");
@@ -1507,6 +1514,15 @@ function OrdersTab({ company, db, save, user }) {
         {editImp && (
           <div className="space-y-4">
             <div className="max-w-xs"><Field label={t("تاريخ الشيت", "Sheet Date")}><input type="date" className={inputCls} value={editImp.date} onChange={(e) => setEditImp({ ...editImp, date: e.target.value })} /></Field></div>
+            <div className="flex items-end gap-2 flex-wrap">
+              <div className="flex-1 min-w-[200px]"><Field label={t("إضافة مندوب للشيت", "Add rider to sheet")}>
+                <select className={inputCls} value={addImpRider} onChange={(e) => setAddImpRider(e.target.value)}>
+                  <option value="">{t("— اختر مندوب —", "— choose rider —")}</option>
+                  {companyRiders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""}</option>)}
+                </select>
+              </Field></div>
+              <Btn kind="ghost" onClick={addRiderToImp} disabled={!addImpRider}><Plus size={14} /> {t("إضافة", "Add")}</Btn>
+            </div>
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="max-h-80 overflow-auto"><table className="w-full text-xs">
                 <thead><tr className="text-right text-slate-400 border-b border-slate-100">{[tr("المندوب"), tr("عدد الطلبات"), tr("مبلغ COD"), t("ساعات", "Hours"), t("قبول %", "Accept %")].map((h) => <th key={h} className="py-1.5 px-2 font-semibold">{h}</th>)}</tr></thead>
@@ -3342,7 +3358,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
                       const info = sheetPayInfo(h.date);
                       if (info.st === "approved") return <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: "#0f9d58" }}><CheckCircle2 size={14} /> {t("تم الدفع", "Paid")}</span>;
                       if (info.st === "pending") return <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#d97706" }}><Clock size={13} /> {t("قيد المراجعة", "Under review")}</span>;
-                      return <button onClick={() => { if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك الدفع ورفع الإيصال فقط من الساعة " + w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can pay and upload a receipt only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; } setForm({ amount: String(h.cod), reference: "", date: h.date, receipt: "" }); setUpErr(""); setPayFor(h); setTimeout(() => { const el = typeof document !== "undefined" && document.getElementById("cod-transfer-form"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); }} className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ background: "#fee2e2", color: "#c0341d" }}><Upload size={12} /> {info.st === "rejected" ? t("مرفوض — ادفع", "Rejected — Pay") : t("ادفع الآن", "Pay Now")}</button>;
+                      return <button onClick={() => { if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك الدفع ورفع الإيصال فقط من الساعة " + w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can pay and upload a receipt only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; } setForm({ amount: String(h.cod), reference: "", date: h.date, receipt: "" }); setUpErr(""); setPayFor(h); setTimeout(() => { const el = typeof document !== "undefined" && document.getElementById("cod-transfer-form"); if (!el) return; const top = el.getBoundingClientRect().top + (window.pageYOffset || 0) - 16; window.scrollTo({ top: Math.max(0, top), behavior: "smooth" }); el.scrollIntoView({ behavior: "smooth", block: "start" }); el.style.transition = "box-shadow .3s"; el.style.boxShadow = "0 0 0 3px #fb923c"; setTimeout(() => { el.style.boxShadow = ""; }, 2000); }, 150); }} className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ background: "#fee2e2", color: "#c0341d" }}><Upload size={12} /> {info.st === "rejected" ? t("مرفوض — ادفع", "Rejected — Pay") : t("ادفع الآن", "Pay Now")}</button>;
                     })()}</td>
                   </tr>
                 ); })}
