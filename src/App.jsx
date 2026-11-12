@@ -3276,7 +3276,9 @@ function RiderPortal({ db, riderId, creds, refresh }) {
         <StatCard icon={<CheckCircle2 size={16} />} label={tr("المحوّل")} value={omr(m.transferred)} accent={BRAND.navy} />
         {rider.type === "Full Time" && <StatCard icon={<Clock size={16} />} label={tr("ساعات الدوام")} value={m.hours} accent="#7c3aed" />}
       </div>
-      <Card className="p-5" id="cod-transfer-form">
+      {payFor && <div className="fixed inset-0 z-40 bg-black/40" />}
+      <Card className={payFor ? "p-5 fixed z-50 left-4 right-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto max-h-[90vh] overflow-y-auto relative shadow-2xl" : "p-5"} id="cod-transfer-form">
+        {payFor && <button onClick={() => { setPayFor(null); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); }} className="absolute top-3 right-3 text-slate-500 hover:text-slate-800 text-xl leading-none" aria-label="close">✕</button>}
         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Upload size={18} /> {tr("تحويل COD")}</h3>
         {payFor && (
           <div className="mb-4 p-3 rounded-lg flex items-center justify-between gap-2" style={{ background: "#fff7ed", border: "1px solid #fed7aa" }}>
