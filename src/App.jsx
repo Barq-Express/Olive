@@ -5702,17 +5702,42 @@ export default function App() {
     const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
     keys.forEach((k) => { if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) changed.push(k); });
     if (changed.length === 0) return;
-    if (changed.length <= 3) {
-      Promise.all(changed.map((k) => patchWithRetry(k, next[k]))).then((oks) => {
-        if (oks.some((ok) => !ok)) {
-          // فشل الحفظ نهائياً → أرجع الحالة للأصل حتى لا يظن المستخدم أنه حُفظ
-          dbRef.current = prev; setDb(prev);
-          alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)"));
+    const failSave = () => { dbRef.current = prev; setDb(prev); alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)")); };
+    // دمج ذكي: نقرأ أحدث نسخة من السيرفر، ونطبّق على القوائم فقط التعديلات اللي سويتها (إضافة/تعديل/حذف بالـ id)
+    // بهذا ما يُمسح أي تحويل/إيصال/تسجيل أرسله المندوب أو موظف آخر بعد ما فتحت الصفحة
+    const mergeKey = (srvVal, prevVal, nextVal) => {
+      if (!Array.isArray(nextVal)) return nextVal;
+      const sv = Array.isArray(srvVal) ? srvVal : [];
+      const pv = Array.isArray(prevVal) ? prevVal : [];
+      const all = [...sv, ...pv, ...nextVal];
+      if (all.some((x) => !x || typeof x !== "object" || x.id === undefined || x.id === null)) return nextVal;
+      const prevById = new Map(pv.map((x) => [x.id, x]));
+      const nextById = new Map(nextVal.map((x) => [x.id, x]));
+      let out = sv.filter((x) => !(prevById.has(x.id) && !nextById.has(x.id))); // محذوف من الأدمن
+      nextVal.forEach((nx) => {
+        const px = prevById.get(nx.id);
+        if (!px || JSON.stringify(px) !== JSON.stringify(nx)) { // مُضاف أو مُعدّل من الأدمن
+          const idx = out.findIndex((o) => o.id === nx.id);
+          if (idx >= 0) out[idx] = nx; else out.push(nx);
         }
       });
-    } else {
-      saveDB(next, at).then(({ error }) => { if (error) { console.error(error); dbRef.current = prev; setDb(prev); alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)")); } });
-    }
+      return out;
+    };
+    (async () => {
+      const fresh = await supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single();
+      if (fresh.error || !fresh.data) {
+        const r = await saveDB(next, at);
+        if (r.error) { console.error(r.error); failSave(); }
+        return;
+      }
+      const srv = (fresh.data.data) || {};
+      const merged = { ...srv };
+      changed.forEach((k) => { merged[k] = mergeKey(srv[k], prev[k], next[k]); });
+      const r = await saveDB(merged, at);
+      if (r.error) { console.error(r.error); return failSave(); }
+      const finalDb = normalizeDB(merged);
+      dbRef.current = finalDb; setDb(finalDb);
+    })();
   };
   const changeStaffPw = () => {
     if (spw.nw.length < 6) return setSpwMsg(tr("كلمة المرور يجب أن تكون 6 خانات على الأقل"));
