@@ -4356,10 +4356,33 @@ function VehiclesModule({ db, save, user }) {
     save({ ...db, vehicles: withRow(vehicles, { ...vf, plate: vf.plate.trim(), odoBase: Number(vf.odoBase) || 0, serviceEveryKm: Number(vf.serviceEveryKm) || 5000, lastServiceOdo: Number(vf.lastServiceOdo) || 0 }) });
     setVf(null);
   };
+  // إيقاف شفت جاري من الأدمن: يسجل عداد النهاية، وإذا قبل وقت النهاية المكتوب لازم سبب
+  const stopShift = (s) => {
+    const sOdoStart = Number(s.odoStart);
+    const endIn = window.prompt(t("عداد النهاية للسيارة؟", "End odometer?"), "");
+    if (endIn === null) return;
+    const odoEnd = Number(endIn);
+    if (endIn.trim() === "" || isNaN(odoEnd) || odoEnd < sOdoStart) return alert(t("عداد النهاية لازم يكون رقم، وما يكون أقل من البداية", "End odometer must be a number not less than the start"));
+    const nowHM = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false });
+    const [a, b] = vehSpan(s);
+    let n = vehMin(nowHM);
+    if (n < a) n += 1440;
+    const early = n < b;
+    let reason = "";
+    if (early) {
+      reason = window.prompt(t("الشفت توقف قبل وقت النهاية (" + s.end + "). اكتب السبب:", "Stopped before scheduled end (" + s.end + "). Reason:"), "");
+      if (reason === null) return;
+      if (!reason.trim()) return alert(t("لازم تكتب السبب", "A reason is required"));
+    }
+    const row = { ...s, odoEnd, km: odoEnd - sOdoStart, status: "closed", stoppedAt: nowHM, stoppedEarly: early, stopReason: early ? reason.trim() : "", editedBy: me, editedAt: stamp() };
+    save({ ...db, vehShifts: withRow(shifts, row) });
+  };
   const saveShift = () => {
     const s = sf;
     if (!s.vehicleId || !s.riderId || !s.date || !s.start || !s.end) return alert(t("أكمل: السيارة، المندوب، التاريخ، وقت البداية والنهاية", "Fill vehicle, rider, date and times"));
-    const clash = shifts.find((o) => o.id !== s.id && o.date === s.date && (o.vehicleId === s.vehicleId || o.riderId === s.riderId) && vehOverlap(o, s));
+    // السيارة تعتبر فاضية إذا الشفت السابق مكتمل (انسلّم وعليه نهاية عداد)، أما المندوب فما يتكرر عليه شفت بنفس الوقت
+    const carBusy = (o) => o.vehicleId === s.vehicleId && !(o.odoEnd != null && o.odoEnd !== "");
+    const clash = shifts.find((o) => o.id !== s.id && o.date === s.date && (carBusy(o) || o.riderId === s.riderId) && vehOverlap(o, s));
     if (clash) return alert(t("⚠️ تعارض: " + (clash.vehicleId === s.vehicleId ? "السيارة" : "المندوب") + " عليه شفت ثاني بنفس الوقت (" + clash.start + " - " + clash.end + ")", "Clash with another shift at the same time (" + clash.start + " - " + clash.end + ")"));
     const odoStart = s.odoStart === "" || s.odoStart == null ? null : Number(s.odoStart);
     const odoEnd = s.odoEnd === "" || s.odoEnd == null ? null : Number(s.odoEnd);
@@ -4478,11 +4501,11 @@ function VehiclesModule({ db, save, user }) {
                     <td className={td} dir="ltr">{plateOf(s.vehicleId)}</td>
                     <td className={td}><div>{nameOf(s.riderId)}</div><div className="text-xs text-slate-500">{s.riderType || "—"}</div></td>
                     <td className={td}><span className="text-xs font-semibold" style={{ color: stt[2] }}>{LANG === "en" ? stt[1] : stt[0]}</span></td>
-                    <td className={td} dir="ltr">{s.odoStart ?? "—"} → {s.odoEnd ?? "—"}{s.km != null ? <div className="text-xs text-slate-500">{s.km} km</div> : null}
+                    <td className={td} dir="ltr">{s.odoStart ?? "—"} → {s.odoEnd ?? "—"}{s.km != null ? <div className="text-xs text-slate-500">{s.km} km</div> : null}{s.stoppedEarly ? <div className="text-xs font-semibold" style={{ color: "#c0341d" }}>{t("أُوقف قبل النهاية", "Stopped early")} ({s.stoppedAt}): {s.stopReason}</div> : null}
                       {s.startPhotos ? <div className="flex flex-wrap gap-1 mt-1">{[["odo", "العداد"], ["front", "أمام"], ["back", "خلف"], ["left", "يسار"], ["right", "يمين"]].map(([k, l]) => s.startPhotos[k] ? <a key={k} href={s.startPhotos[k]} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: BRAND.blue }}>{l}</a> : null)}</div> : null}
                     </td>
                     <td className={td}>{(kmWarn[s.id] || []).map((w, i) => <div key={i} className="text-xs text-red-600">⚠️ {w}</div>)}</td>
-                    <td className={td}><div className="flex gap-2"><button onClick={() => setSf({ ...s, odoStart: s.odoStart ?? "", odoEnd: s.odoEnd ?? "" })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button><button onClick={() => removeRow("vehShifts", s.id, t("حذف هذا الشفت؟", "Delete this shift?"))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button></div></td>
+                    <td className={td}><div className="flex gap-2 items-center"><button onClick={() => setSf({ ...s, odoStart: s.odoStart ?? "", odoEnd: s.odoEnd ?? "" })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button><button onClick={() => removeRow("vehShifts", s.id, t("حذف هذا الشفت؟", "Delete this shift?"))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button>{shiftStatus(s) === "started" && <button onClick={() => stopShift(s)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "#fee2e2", color: "#991b1b" }}>{t("إيقاف", "Stop")}</button>}</div></td>
                   </tr>
                 );
               })}
