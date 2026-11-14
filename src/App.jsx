@@ -493,6 +493,11 @@ function normalizeDB(db) {
     balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
     balanceIds: db.balanceIds || [],
     ftPayRules: db.ftPayRules || [],         // قواعد راتب الفول تايم (شهري/بالساعة لكل منطقة)
+    vehicles: db.vehicles || [],             // سجل السيارات
+    vehShifts: db.vehShifts || [],           // الشفتات (سيارة + مندوب + وقت + عدادات)
+    vehViolations: db.vehViolations || [],   // مخالفات السيارات (قرار الأدمن)
+    vehService: db.vehService || [],         // سجل الصيانة
+    vehRiderIds: db.vehRiderIds || [],       // المناديب المصرّح لهم يشوفون السيارات والشفتات في بوابتهم
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
   };
 }
@@ -3139,6 +3144,44 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const [payFor, setPayFor] = useState(null); // الشيت المختار للدفع (ادفع الآن)
   const [pwf, setPwf] = useState({ cur: "", nw: "", cf: "" });
   const [pwMsg, setPwMsg] = useState("");
+  // سيارات وشفتات المندوب: تسجيل عداد البداية والنهاية
+  const [odoIn, setOdoIn] = useState({});
+  const [odoBusy, setOdoBusy] = useState("");
+  const [odoMsg, setOdoMsg] = useState("");
+  // صور الاستلام: صورة العداد + السيارة من 4 جهات (كاميرا فقط)
+  const [shots, setShots] = useState({});
+  const SHOT_SLOTS = [["odo", t("صورة العداد", "Odometer photo")], ["front", t("السيارة من الأمام", "Front")], ["back", t("من الخلف", "Back")], ["left", t("من اليسار", "Left")], ["right", t("من اليمين", "Right")]];
+  const setShot = (sid, k, f) => { if (f) setShots((cur) => ({ ...cur, [sid]: { ...(cur[sid] || {}), [k]: f } })); };
+  const [camFor, setCamFor] = useState(null); // الكاميرا المباشرة: {sid, key, label}
+  const myShifts = (db.vehShifts || []).filter((s) => s.riderId === riderId).sort((a, b) => (String(b.date) + String(b.start)).localeCompare(String(a.date) + String(a.start))).slice(0, 30);
+  const myViols = (db.vehViolations || []).filter((x) => x.riderId === riderId && x.status !== "rejected");
+  const submitOdo = (s, kind) => {
+    const val = odoIn[s.id];
+    if (val === undefined || String(val).trim() === "") return setOdoMsg(t("اكتب قراءة العداد", "Enter the odometer reading"));
+    const ph = shots[s.id] || {};
+    if (kind === "start" && SHOT_SLOTS.some(([k]) => !ph[k])) return setOdoMsg(t("لازم تصوّر العداد والسيارة من 4 جهات بالكاميرا", "You must photograph the odometer and the car from 4 sides with the camera"));
+    setOdoBusy(s.id); setOdoMsg("");
+    const upPhotos = async () => {
+      if (kind !== "start") return null;
+      const out = {};
+      for (const [k] of SHOT_SLOTS) { const f = ph[k]; out[k] = await uploadToStorage(f, "jpg", "image/jpeg"); }
+      return out;
+    };
+    upPhotos().catch(() => null).then((photos) => {
+      if (kind === "start" && !photos) { setOdoBusy(""); return setOdoMsg(t("تعذّر رفع الصور، حاول مرة أخرى", "Photo upload failed, try again")); }
+      return supabase.rpc("rider_vehicle_odo", { p_phone: creds.phone, p_password: creds.password, p_shift_id: s.id, p_kind: kind, p_odo: Number(val), p_photos: photos })
+      .then(({ data, error }) => {
+        setOdoBusy("");
+        if (error || !data) return setOdoMsg(t("تعذّر الإرسال، حاول مرة أخرى", "Failed, try again"));
+        const errs = { not_found: t("الشفت غير موجود", "Shift not found"), not_yours: t("هذا الشفت ليس لك", "Not your shift"), already_closed: t("الشفت مغلق ولا يقبل تعديل", "Shift is closed"), start_too_low: t("العداد أقل من آخر قراءة للسيارة", "Reading is lower than the last reading"), end_before_start: t("عداد النهاية أقل من البداية", "End reading is lower than start"), no_start: t("سجّل عداد البداية أولاً", "Record the start reading first"), bad_odo: t("قراءة غير صحيحة", "Invalid reading") };
+        if (data.error) return setOdoMsg("⚠️ " + (errs[data.error] || data.error));
+        setOdoIn((cur) => ({ ...cur, [s.id]: "" }));
+        setOdoMsg(t("✅ تم تسجيل العداد", "✅ Saved"));
+        setShots((cur) => { const n = { ...cur }; delete n[s.id]; return n; });
+        refresh();
+      });
+    });
+  };
   const m = riderMoney(db, riderId);
   // فصل المستحق: من أكتوبر (النظام الجديد، يظهر فوق) عن السابق (يُسدّد عبر المالية)
   const _r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
@@ -3276,6 +3319,56 @@ function RiderPortal({ db, riderId, creds, refresh }) {
         <StatCard icon={<CheckCircle2 size={16} />} label={tr("المحوّل")} value={omr(m.transferred)} accent={BRAND.navy} />
         {rider.type === "Full Time" && <StatCard icon={<Clock size={16} />} label={tr("ساعات الدوام")} value={m.hours} accent="#7c3aed" />}
       </div>
+      {(myShifts.length > 0 || myViols.length > 0) && (
+        <Card className="p-5 mb-4">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Truck size={18} /> {tr("سيارتي وشفتاتي")}</h3>
+          {myShifts.length === 0 ? <p className="text-sm text-slate-400">{tr("ما عندك شفتات بعد")}</p> : (
+            <div className="space-y-3">
+              {myShifts.map((s) => {
+                const v = (db.vehicles || []).find((x) => x.id === s.vehicleId) || {};
+                const started = s.odoStart != null && s.odoStart !== "";
+                const closed = s.odoEnd != null && s.odoEnd !== "";
+                return (
+                  <div key={s.id} className="p-3 rounded-xl border border-slate-200">
+                    <div className="flex justify-between text-sm"><b>{s.date} · {s.label}</b><span dir="ltr" className="font-semibold">{v.plate || "—"}</span></div>
+                    <div className="text-xs text-slate-500 mb-2" dir="ltr">{s.start} - {s.end}</div>
+                    {!closed && (
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <span className="text-xs text-slate-600">{started ? t("عداد البداية: " + s.odoStart + " — سجّل النهاية", "Start: " + s.odoStart + " — enter end") : t("سجّل عداد البداية", "Enter start odometer")}</span>
+                        <input type="number" dir="ltr" className={inputCls} style={{ width: 120 }} value={odoIn[s.id] ?? ""} onChange={(e) => setOdoIn({ ...odoIn, [s.id]: e.target.value })} placeholder="km" />
+                        <Btn size="sm" onClick={() => submitOdo(s, started ? "end" : "start")} disabled={odoBusy === s.id}>{started ? tr("إنهاء الشفت") : t("استلام السيارة وبدء الشفت", "Receive car & start shift")}</Btn>
+                        {!started && (
+                          <div className="w-full grid grid-cols-2 gap-2 mt-1">
+                            {SHOT_SLOTS.map(([k, label]) => { const f = (shots[s.id] || {})[k]; return (
+                              <button key={k} type="button" onClick={() => setCamFor({ sid: s.id, key: k, label })} className="flex items-center gap-2 text-xs p-2 rounded-lg border text-start" style={{ borderColor: f ? "#0f9d58" : "#cbd5e1", background: f ? "#f0fdf4" : "#fff", color: "#334155" }}>
+                                <span>{f ? "✓" : "📷"} {label}</span>
+                              </button>
+                            ); })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {closed && <div className="text-sm" dir="ltr">{s.odoStart} → {s.odoEnd} = <b>{s.km} km</b> ✓</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {odoMsg && <p className="text-xs mt-2 text-slate-600">{odoMsg}</p>}
+          {myViols.length > 0 && (
+            <div className="mt-4">
+              <h4 className="font-semibold text-sm mb-2">{tr("المخالفات")}</h4>
+              {myViols.map((x) => (
+                <div key={x.id} className="flex justify-between text-sm py-1.5 border-t border-slate-100">
+                  <span>{x.date} · {x.kind}</span>
+                  <span className="font-semibold" style={{ color: x.status === "approved" ? "#c0341d" : "#64748b" }}>{x.status === "approved" ? t("مخصومة ", "Deducted ") + omr(x.amount) : t("قيد القرار", "Pending")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+      {camFor && <CameraCapture label={camFor.label} onClose={() => setCamFor(null)} onCapture={(blob) => { setShot(camFor.sid, camFor.key, blob); setCamFor(null); }} />}
       {payFor && <div className="fixed inset-0 z-40 bg-black/40" />}
       <Card className={payFor ? "p-5 fixed z-50 left-4 right-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto max-h-[90vh] overflow-y-auto shadow-2xl" : "p-5"} id="cod-transfer-form">
         {payFor && <button onClick={() => { setPayFor(null); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); }} className="absolute top-3 right-3 text-slate-500 hover:text-slate-800 text-xl leading-none" aria-label="close">✕</button>}
@@ -4136,6 +4229,429 @@ function TaskDetail({ id, me, db, onChanged }) {
       </div>
 
       {msg && <div className="text-sm" style={{ color: msg.startsWith("✅") ? "#0f9d58" : "#c0341d" }}>{msg}</div>}
+    </div>
+  );
+}
+
+/* ---------- كاميرا مباشرة (بدون معرض الصور) لتصوير السيارة ---------- */
+function CameraCapture({ label, onCapture, onClose }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setErr(t("الكاميرا غير متاحة في هذا المتصفح، جرّب متصفح ثاني أو تأكد أن الرابط https", "Camera not available in this browser")); return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((tk) => tk.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+      })
+      .catch(() => { if (!cancelled) setErr(t("لازم تسمح للكاميرا من إعدادات المتصفح ثم تحاول مرة ثانية", "Please allow camera access in your browser settings and try again")); });
+    return () => { cancelled = true; if (streamRef.current) streamRef.current.getTracks().forEach((tk) => tk.stop()); };
+  }, []);
+  const snap = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    const scale = Math.min(1, 1280 / v.videoWidth);
+    const c = document.createElement("canvas");
+    c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    setBusy(true);
+    c.toBlob((blob) => { setBusy(false); if (blob) onCapture(blob); }, "image/jpeg", 0.85);
+  };
+  return (
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+      <div className="flex justify-between items-center p-3 text-white"><b>{label}</b><button onClick={onClose} className="text-2xl leading-none px-2" aria-label="close">✕</button></div>
+      {err ? <div className="flex-1 flex items-center justify-center text-white text-center p-6">{err}</div>
+           : <video ref={videoRef} playsInline muted className="flex-1 w-full object-contain bg-black" />}
+      <div className="p-5 flex justify-center">
+        <button disabled={!!err || busy} onClick={snap} className="w-20 h-20 rounded-full border-4 border-white bg-white/30 disabled:opacity-40" aria-label="capture" />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- إدارة السيارات: سجل + شفتات + كيلومترات + مخالفات + صيانة + تقرير ---------- */
+const VEH_STATUS = { active: ["نشطة", "Active", "#0f9d58"], maintenance: ["صيانة", "Maintenance", "#d97706"], stopped: ["متوقفة", "Stopped", "#c0341d"] };
+const VEH_SHIFT_ST = { planned: ["مخطط", "Planned", "#64748b"], started: ["جاري", "Running", "#d97706"], closed: ["مكتمل", "Closed", "#0f9d58"] };
+const VEH_KM_ALERT = 400; // تنبيه إذا الشفت تجاوز هذا العدد من الكيلومترات
+const vehMin = (hhmm) => { const p = String(hhmm || "").split(":"); return Number(p[0] || 0) * 60 + Number(p[1] || 0); };
+const vehSpan = (s) => { const a = vehMin(s.start), b = vehMin(s.end); return [a, b <= a ? b + 1440 : b]; };
+const vehOverlap = (a, b) => { const [a1, a2] = vehSpan(a), [b1, b2] = vehSpan(b); return a1 < b2 && b1 < a2; };
+const vehOdoLast = (db, vehId) => {
+  const v = (db.vehicles || []).find((x) => x.id === vehId);
+  let mx = Number(v && v.odoBase) || 0;
+  (db.vehShifts || []).forEach((s) => { if (s.vehicleId === vehId) mx = Math.max(mx, Number(s.odoStart) || 0, Number(s.odoEnd) || 0); });
+  return mx;
+};
+const vehDaysTo = (d) => (d ? Math.round((new Date(d + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000) : null);
+const withRow = (arr, row) => { const list = arr || []; return list.some((x) => x.id === row.id) ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row]; };
+
+function VehiclesModule({ db, save, user }) {
+  const [tab, setTab] = useState("fleet");
+  const [vf, setVf] = useState(null);   // نموذج سيارة
+  const [sf, setSf] = useState(null);   // نموذج شفت
+  const [vio, setVio] = useState(null); // نموذج مخالفة
+  const [svc, setSvc] = useState(null); // نموذج صيانة
+  const [day, setDay] = useState(todayStr());
+  const [kmFrom, setKmFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); });
+  const [kmTo, setKmTo] = useState(todayStr());
+  const [vioFilter, setVioFilter] = useState("pending");
+  const [accQ, setAccQ] = useState("");
+  const vehAllowed = db.vehRiderIds || [];
+  const toggleVehAccess = (id) => save({ ...db, vehRiderIds: vehAllowed.includes(id) ? vehAllowed.filter((x) => x !== id) : [...vehAllowed, id] });
+  const vehicles = db.vehicles || [], shifts = db.vehShifts || [], viols = db.vehViolations || [], svcs = db.vehService || [];
+  const riders = db.riders || [];
+  const plateOf = (id) => { const v = vehicles.find((x) => x.id === id); return v ? v.plate : "—"; };
+  const nameOf = (id) => { const r = riders.find((x) => x.id === id); return r ? r.name : "—"; };
+  const me = (user && (user.name || user.email)) || "";
+  const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+  const shiftStatus = (s) => (s.odoEnd != null && s.odoEnd !== "" ? "closed" : s.odoStart != null && s.odoStart !== "" ? "started" : "planned");
+
+  const saveVehicle = () => {
+    if (!vf.plate.trim()) return alert(t("اكتب رقم اللوحة", "Enter the plate"));
+    save({ ...db, vehicles: withRow(vehicles, { ...vf, plate: vf.plate.trim(), odoBase: Number(vf.odoBase) || 0, serviceEveryKm: Number(vf.serviceEveryKm) || 5000, lastServiceOdo: Number(vf.lastServiceOdo) || 0 }) });
+    setVf(null);
+  };
+  const saveShift = () => {
+    const s = sf;
+    if (!s.vehicleId || !s.riderId || !s.date || !s.start || !s.end) return alert(t("أكمل: السيارة، المندوب، التاريخ، وقت البداية والنهاية", "Fill vehicle, rider, date and times"));
+    const clash = shifts.find((o) => o.id !== s.id && o.date === s.date && (o.vehicleId === s.vehicleId || o.riderId === s.riderId) && vehOverlap(o, s));
+    if (clash) return alert(t("⚠️ تعارض: " + (clash.vehicleId === s.vehicleId ? "السيارة" : "المندوب") + " عليه شفت ثاني بنفس الوقت (" + clash.start + " - " + clash.end + ")", "Clash with another shift at the same time (" + clash.start + " - " + clash.end + ")"));
+    const odoStart = s.odoStart === "" || s.odoStart == null ? null : Number(s.odoStart);
+    const odoEnd = s.odoEnd === "" || s.odoEnd == null ? null : Number(s.odoEnd);
+    if (odoStart != null && odoEnd != null && odoEnd < odoStart) return alert(t("عداد النهاية أقل من عداد البداية", "End odometer is less than start"));
+    const rider = riders.find((r) => r.id === s.riderId) || {};
+    const row = { ...s, riderType: rider.type || "", odoStart, odoEnd, km: odoStart != null && odoEnd != null ? odoEnd - odoStart : null, createdBy: s.createdBy || me, editedBy: me, editedAt: stamp() };
+    row.status = shiftStatus(row);
+    save({ ...db, vehShifts: withRow(shifts, row) });
+    setSf(null);
+  };
+  const saveViolation = () => {
+    const v = vio;
+    if (!v.vehicleId || !v.date || !String(v.kind || "").trim()) return alert(t("أكمل: السيارة، التاريخ، نوع المخالفة", "Fill vehicle, date and kind"));
+    const sh = shifts.find((s) => s.id === v.shiftId);
+    save({ ...db, vehViolations: withRow(viols, { ...v, riderId: sh ? sh.riderId : (v.riderId || ""), amount: Number(v.amount) || 0, status: v.status || "pending", createdBy: v.createdBy || me, createdAt: v.createdAt || stamp() }) });
+    setVio(null);
+  };
+  // قرار الأدمن: الاعتماد يسوي خصم من راتب المندوب (يدخل سجل الخصومات)، والرفض يقفل المخالفة
+  const decideViolation = (x, ok) => {
+    if (x.status !== "pending") return;
+    if (!ok) return save({ ...db, vehViolations: withRow(viols, { ...x, status: "rejected", decidedBy: me, decidedAt: stamp() }) });
+    const amt = Number(x.amount) || 0;
+    if (amt > 0 && !x.riderId) return alert(t("هذي المخالفة ما لها مندوب، عدّل المخالفة واختر الشفت", "No rider linked. Edit the violation and pick the shift"));
+    if (!window.confirm(amt > 0 ? t("اعتماد المخالفة وخصم " + amt.toFixed(3) + " ر.ع من راتب " + nameOf(x.riderId) + "؟", "Approve and deduct " + amt.toFixed(3) + " OMR from " + nameOf(x.riderId) + "?") : t("اعتماد المخالفة بدون خصم؟", "Approve without deduction?"))) return;
+    const dedId = amt > 0 ? uid() : "";
+    const ded = amt > 0 ? { id: dedId, riderId: x.riderId, amount: +amt.toFixed(3), reason: "مخالفة سيارة " + plateOf(x.vehicleId) + ": " + x.kind, date: x.date, month: String(x.date).slice(0, 7), status: "approved", at: stamp(), by: me, source: "vehicle", violationId: x.id } : null;
+    save({ ...db, codDeductions: ded ? [...(db.codDeductions || []), ded] : (db.codDeductions || []), vehViolations: viols.map((y) => (y.id === x.id ? { ...y, status: "approved", decidedBy: me, decidedAt: stamp(), deductionId: dedId } : y)) });
+  };
+  // صيانة: تحديث آخر صيانة للسيارة بنفس الحفظ (حفظ واحد)
+  const saveService = () => {
+    const x = svc;
+    if (!x.vehicleId || !x.date) return alert(t("اختر السيارة والتاريخ", "Pick vehicle and date"));
+    const odo = Number(x.odo) || 0;
+    const v = vehicles.find((y) => y.id === x.vehicleId);
+    const nextVehicles = v && odo > (Number(v.lastServiceOdo) || 0) ? withRow(vehicles, { ...v, lastServiceOdo: odo, status: v.status === "maintenance" ? "active" : v.status }) : vehicles;
+    save({ ...db, vehService: withRow(svcs, { ...x, odo, cost: Number(x.cost) || 0, createdBy: x.createdBy || me }), vehicles: nextVehicles });
+    setSvc(null);
+  };
+  const removeRow = (key, id, msg) => { if (!window.confirm(msg)) return; save({ ...db, [key]: (db[key] || []).filter((x) => x.id !== id) }); };
+
+  // تحذيرات الكيلومترات: شفت طويل، أو عداد نزل عن الشفت السابق للسيارة، أو شفت ما انقفل بعد وقته
+  const kmWarn = useMemo(() => {
+    const map = {}; const byVeh = {};
+    shifts.forEach((s) => { (byVeh[s.vehicleId] = byVeh[s.vehicleId] || []).push(s); });
+    Object.values(byVeh).forEach((list) => {
+      list.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+      let last = null;
+      list.forEach((s) => {
+        const w = [];
+        if (s.km != null && Number(s.km) > VEH_KM_ALERT) w.push(t("كيلومترات عالية (" + s.km + ")", "High km (" + s.km + ")"));
+        if (s.odoStart != null && last != null && Number(s.odoStart) < last) w.push(t("عداد البداية أقل من آخر عداد للسيارة", "Start odometer lower than last reading"));
+        if (s.date < todayStr() && shiftStatus(s) !== "closed") w.push(t("الشفت ما انقفل (ما فيه عداد نهاية)", "Shift not closed (no end odometer)"));
+        if (s.odoEnd != null && s.odoEnd !== "") last = Number(s.odoEnd); else if (s.odoStart != null && s.odoStart !== "") last = Number(s.odoStart);
+        map[s.id] = w;
+      });
+    });
+    return map;
+  }, [shifts]);
+
+  const tabs = [["fleet", t("السيارات", "Fleet")], ["shifts", t("الشفتات", "Shifts")], ["km", t("الكيلومترات", "Kilometers")], ["viol", t("المخالفات", "Violations")], ["service", t("الصيانة", "Maintenance")], ["report", t("التقرير", "Report")], ["access", t("صلاحية المناديب", "Rider access")]];
+  const th = "p-2 text-start text-xs font-semibold text-slate-500 whitespace-nowrap";
+  const td = "p-2 align-top text-sm";
+  const shiftOpts = (vehicleId, date) => shifts.filter((s) => s.vehicleId === vehicleId && s.date === date);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {tabs.map(([k, label]) => <button key={k} onClick={() => setTab(k)} className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ background: tab === k ? BRAND.navy : "#f1f5f9", color: tab === k ? "#fff" : "#334155" }}>{label}</button>)}
+      </div>
+
+      {tab === "fleet" && (
+        <Card className="p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-bold text-slate-800">{t("سجل السيارات", "Fleet")}</h3>
+            <Btn onClick={() => setVf({ id: uid(), plate: "", model: "", area: "", status: "active", odoBase: "", insuranceExpiry: "", regExpiry: "", serviceEveryKm: "5000", lastServiceOdo: "" })}><Plus size={14} /> {t("سيارة جديدة", "New vehicle")}</Btn>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead className="bg-slate-50"><tr><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("الحالة", "Status")}</th><th className={th}>{t("آخر عداد", "Last odo")}</th><th className={th}>{t("الصيانة القادمة", "Next service")}</th><th className={th}>{t("الأوراق", "Documents")}</th><th className={th}></th></tr></thead>
+            <tbody>
+              {vehicles.map((v) => {
+                const st = VEH_STATUS[v.status] || VEH_STATUS.active;
+                const odo = vehOdoLast(db, v.id);
+                const due = (Number(v.lastServiceOdo) || 0) + (Number(v.serviceEveryKm) || 5000) - odo;
+                const ins = vehDaysTo(v.insuranceExpiry), reg = vehDaysTo(v.regExpiry);
+                return (
+                  <tr key={v.id} className="border-t border-slate-100">
+                    <td className={td}><div className="font-bold" dir="ltr">{v.plate}</div><div className="text-xs text-slate-500">{v.model} · {v.area}</div></td>
+                    <td className={td}><Pill color={st[2]}>{LANG === "en" ? st[1] : st[0]}</Pill></td>
+                    <td className={td} dir="ltr">{odo.toLocaleString()} km</td>
+                    <td className={td} style={{ color: due <= 500 ? "#c0341d" : undefined, fontWeight: due <= 500 ? 700 : 400 }}>{due <= 0 ? t("مستحقة الآن", "Due now") : t("بعد " + due + " كم", "in " + due + " km")}</td>
+                    <td className={td} dir="ltr"><div className="text-xs" style={{ color: ins != null && ins <= 30 ? "#c0341d" : undefined }}>{t("تأمين: ", "Ins: ")}{v.insuranceExpiry || "—"}</div><div className="text-xs" style={{ color: reg != null && reg <= 30 ? "#c0341d" : undefined }}>{t("استمارة: ", "Reg: ")}{v.regExpiry || "—"}</div></td>
+                    <td className={td}><button onClick={() => setVf({ ...v, odoBase: String(v.odoBase ?? ""), lastServiceOdo: String(v.lastServiceOdo ?? ""), serviceEveryKm: String(v.serviceEveryKm ?? 5000) })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button></td>
+                  </tr>
+                );
+              })}
+              {vehicles.length === 0 && <tr><td className="p-4 text-center text-slate-400" colSpan={6}>{t("ما فيه سيارات بعد", "No vehicles yet")}</td></tr>}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+
+      {tab === "shifts" && (
+        <Card className="p-4">
+          <div className="flex flex-wrap gap-3 items-end justify-between mb-3">
+            <div className="max-w-xs"><Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={day} onChange={(e) => setDay(e.target.value)} /></Field></div>
+            <Btn onClick={() => setSf({ id: uid(), vehicleId: "", riderId: "", date: day, label: "صباحي", start: "08:00", end: "16:00", odoStart: "", odoEnd: "" })}><Plus size={14} /> {t("شفت جديد", "New shift")}</Btn>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead className="bg-slate-50"><tr><th className={th}>{t("الشفت", "Shift")}</th><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("المندوب", "Rider")}</th><th className={th}>{t("الحالة", "Status")}</th><th className={th}>{t("العداد", "Odometer")}</th><th className={th}>{t("تنبيهات", "Alerts")}</th><th className={th}></th></tr></thead>
+            <tbody>
+              {shifts.filter((s) => s.date === day).sort((a, b) => String(a.start).localeCompare(String(b.start))).map((s) => {
+                const stt = VEH_SHIFT_ST[shiftStatus(s)];
+                return (
+                  <tr key={s.id} className="border-t border-slate-100">
+                    <td className={td}><div className="font-semibold">{s.label}</div><div className="text-xs text-slate-500" dir="ltr">{s.start} - {s.end}</div></td>
+                    <td className={td} dir="ltr">{plateOf(s.vehicleId)}</td>
+                    <td className={td}><div>{nameOf(s.riderId)}</div><div className="text-xs text-slate-500">{s.riderType || "—"}</div></td>
+                    <td className={td}><span className="text-xs font-semibold" style={{ color: stt[2] }}>{LANG === "en" ? stt[1] : stt[0]}</span></td>
+                    <td className={td} dir="ltr">{s.odoStart ?? "—"} → {s.odoEnd ?? "—"}{s.km != null ? <div className="text-xs text-slate-500">{s.km} km</div> : null}
+                      {s.startPhotos ? <div className="flex flex-wrap gap-1 mt-1">{[["odo", "العداد"], ["front", "أمام"], ["back", "خلف"], ["left", "يسار"], ["right", "يمين"]].map(([k, l]) => s.startPhotos[k] ? <a key={k} href={s.startPhotos[k]} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: BRAND.blue }}>{l}</a> : null)}</div> : null}
+                    </td>
+                    <td className={td}>{(kmWarn[s.id] || []).map((w, i) => <div key={i} className="text-xs text-red-600">⚠️ {w}</div>)}</td>
+                    <td className={td}><div className="flex gap-2"><button onClick={() => setSf({ ...s, odoStart: s.odoStart ?? "", odoEnd: s.odoEnd ?? "" })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button><button onClick={() => removeRow("vehShifts", s.id, t("حذف هذا الشفت؟", "Delete this shift?"))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button></div></td>
+                  </tr>
+                );
+              })}
+              {shifts.filter((s) => s.date === day).length === 0 && <tr><td className="p-4 text-center text-slate-400" colSpan={7}>{t("ما فيه شفتات لهذا اليوم", "No shifts this day")}</td></tr>}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+
+      {tab === "km" && (
+        <Card className="p-4">
+          <div className="flex flex-wrap gap-3 items-end mb-3">
+            <div><Field label={t("من", "From")}><input type="date" className={inputCls} value={kmFrom} onChange={(e) => setKmFrom(e.target.value)} /></Field></div>
+            <div><Field label={t("إلى", "To")}><input type="date" className={inputCls} value={kmTo} onChange={(e) => setKmTo(e.target.value)} /></Field></div>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead className="bg-slate-50"><tr><th className={th}>{t("التاريخ", "Date")}</th><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("المندوب", "Rider")}</th><th className={th}>{t("البداية", "Start")}</th><th className={th}>{t("النهاية", "End")}</th><th className={th}>{t("الكم", "KM")}</th><th className={th}>{t("تنبيهات", "Alerts")}</th><th className={th}></th></tr></thead>
+            <tbody>
+              {shifts.filter((s) => s.date >= kmFrom && s.date <= kmTo).sort((a, b) => (b.date + b.start).localeCompare(a.date + a.start)).map((s) => (
+                <tr key={s.id} className="border-t border-slate-100">
+                  <td className={td} dir="ltr">{s.date}</td>
+                  <td className={td} dir="ltr">{plateOf(s.vehicleId)}</td>
+                  <td className={td}>{nameOf(s.riderId)}</td>
+                  <td className={td} dir="ltr">{s.odoStart ?? "—"}</td>
+                  <td className={td} dir="ltr">{s.odoEnd ?? "—"}</td>
+                  <td className={td} dir="ltr"><b>{s.km ?? "—"}</b></td>
+                  <td className={td}>{(kmWarn[s.id] || []).map((w, i) => <div key={i} className="text-xs text-red-600">⚠️ {w}</div>)}</td>
+                  <td className={td}><button onClick={() => setSf({ ...s, odoStart: s.odoStart ?? "", odoEnd: s.odoEnd ?? "" })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+
+      {tab === "viol" && (
+        <Card className="p-4">
+          <div className="flex flex-wrap gap-2 justify-between items-center mb-3">
+            <div className="flex gap-2">{[["pending", t("قيد القرار", "Pending")], ["approved", t("معتمدة", "Approved")], ["rejected", t("مرفوضة", "Rejected")], ["all", t("الكل", "All")]].map(([k, l]) => <button key={k} onClick={() => setVioFilter(k)} className="px-3 py-1 rounded-lg text-xs font-semibold" style={{ background: vioFilter === k ? BRAND.navy : "#f1f5f9", color: vioFilter === k ? "#fff" : "#334155" }}>{l}</button>)}</div>
+            <Btn onClick={() => setVio({ id: uid(), vehicleId: "", date: day, time: "", kind: "", amount: "", shiftId: "", note: "" })}><Plus size={14} /> {t("مخالفة جديدة", "New violation")}</Btn>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead className="bg-slate-50"><tr><th className={th}>{t("التاريخ", "Date")}</th><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("المندوب", "Rider")}</th><th className={th}>{t("المخالفة", "Violation")}</th><th className={th}>{t("المبلغ", "Amount")}</th><th className={th}>{t("الحالة", "Status")}</th><th className={th}></th></tr></thead>
+            <tbody>
+              {viols.filter((x) => vioFilter === "all" || x.status === vioFilter).sort((a, b) => String(b.date).localeCompare(String(a.date))).map((x) => (
+                <tr key={x.id} className="border-t border-slate-100">
+                  <td className={td} dir="ltr">{x.date} {x.time || ""}</td>
+                  <td className={td} dir="ltr">{plateOf(x.vehicleId)}</td>
+                  <td className={td}>{nameOf(x.riderId)}</td>
+                  <td className={td}><div>{x.kind}</div>{x.note ? <div className="text-xs text-slate-500">{x.note}</div> : null}</td>
+                  <td className={td} dir="ltr">{omr(Number(x.amount) || 0)}</td>
+                  <td className={td}><span className="text-xs font-semibold" style={{ color: x.status === "approved" ? "#0f9d58" : x.status === "rejected" ? "#c0341d" : "#d97706" }}>{x.status === "approved" ? t("معتمدة", "Approved") : x.status === "rejected" ? t("مرفوضة", "Rejected") : t("قيد القرار", "Pending")}</span>{x.decidedBy ? <div className="text-[10px] text-slate-400">{x.decidedBy}</div> : null}</td>
+                  <td className={td}><div className="flex gap-2 items-center">
+                    {x.status === "pending" && <><button onClick={() => decideViolation(x, true)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "#dcfce7", color: "#166534" }}>{t("اعتماد", "Approve")}</button><button onClick={() => decideViolation(x, false)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "#fee2e2", color: "#991b1b" }}>{t("رفض", "Reject")}</button></>}
+                    {x.status === "pending" && <button onClick={() => setVio({ ...x })} className="text-slate-500 hover:text-slate-800"><Pencil size={14} /></button>}
+                  </div></td>
+                </tr>
+              ))}
+              {viols.filter((x) => vioFilter === "all" || x.status === vioFilter).length === 0 && <tr><td className="p-4 text-center text-slate-400" colSpan={7}>{t("ما فيه مخالفات", "No violations")}</td></tr>}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+
+      {tab === "service" && (
+        <div className="space-y-4">
+          <Card className="p-4">
+            <h3 className="font-bold text-slate-800 mb-3">{t("صيانة قادمة", "Upcoming service")}</h3>
+            <div className="space-y-2">
+              {vehicles.map((v) => { const due = (Number(v.lastServiceOdo) || 0) + (Number(v.serviceEveryKm) || 5000) - vehOdoLast(db, v.id); return (
+                <div key={v.id} className="flex justify-between text-sm"><span dir="ltr" className="font-semibold">{v.plate}</span><span style={{ color: due <= 500 ? "#c0341d" : "#334155", fontWeight: due <= 500 ? 700 : 400 }}>{due <= 0 ? t("مستحقة الآن", "Due now") : t("بعد " + due + " كم", "in " + due + " km")}</span></div>
+              ); })}
+              {vehicles.length === 0 && <div className="text-sm text-slate-400">{t("ما فيه سيارات", "No vehicles")}</div>}
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-slate-800">{t("سجل الصيانة", "Service log")}</h3>
+              <Btn onClick={() => setSvc({ id: uid(), vehicleId: "", date: todayStr(), odo: "", kind: "تغيير زيت", cost: "", note: "" })}><Plus size={14} /> {t("صيانة جديدة", "New service")}</Btn>
+            </div>
+            <div className="overflow-x-auto"><table className="w-full">
+              <thead className="bg-slate-50"><tr><th className={th}>{t("التاريخ", "Date")}</th><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("العداد", "Odo")}</th><th className={th}>{t("النوع", "Type")}</th><th className={th}>{t("التكلفة", "Cost")}</th><th className={th}></th></tr></thead>
+              <tbody>
+                {svcs.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((x) => (
+                  <tr key={x.id} className="border-t border-slate-100">
+                    <td className={td} dir="ltr">{x.date}</td><td className={td} dir="ltr">{plateOf(x.vehicleId)}</td><td className={td} dir="ltr">{x.odo}</td>
+                    <td className={td}>{x.kind}{x.note ? <div className="text-xs text-slate-500">{x.note}</div> : null}</td>
+                    <td className={td} dir="ltr">{omr(Number(x.cost) || 0)}</td>
+                    <td className={td}><button onClick={() => removeRow("vehService", x.id, t("حذف هذه الصيانة؟", "Delete this service?"))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          </Card>
+        </div>
+      )}
+
+      {tab === "report" && (
+        <Card className="p-4">
+          <h3 className="font-bold text-slate-800 mb-3">{t("تقرير السيارات", "Fleet report")}</h3>
+          <div className="overflow-x-auto"><table className="w-full">
+            <thead className="bg-slate-50"><tr><th className={th}>{t("السيارة", "Vehicle")}</th><th className={th}>{t("الشفتات", "Shifts")}</th><th className={th}>{t("الكيلومترات", "KM")}</th><th className={th}>{t("المناديب", "Riders")}</th><th className={th}>{t("مخالفات معتمدة", "Approved violations")}</th><th className={th}>{t("تكلفة الصيانة", "Maintenance cost")}</th><th className={th}>{t("آخر عداد", "Last odo")}</th></tr></thead>
+            <tbody>
+              {vehicles.map((v) => {
+                const vs = shifts.filter((s) => s.vehicleId === v.id);
+                const km = vs.reduce((a, s) => a + (Number(s.km) || 0), 0);
+                const riderSet = new Set(vs.map((s) => s.riderId));
+                const va = viols.filter((x) => x.vehicleId === v.id && x.status === "approved").reduce((a, x) => a + (Number(x.amount) || 0), 0);
+                const sc = svcs.filter((x) => x.vehicleId === v.id).reduce((a, x) => a + (Number(x.cost) || 0), 0);
+                return (
+                  <tr key={v.id} className="border-t border-slate-100">
+                    <td className={td} dir="ltr"><b>{v.plate}</b></td><td className={td}>{vs.length}</td><td className={td} dir="ltr">{km.toLocaleString()}</td><td className={td}>{riderSet.size}</td>
+                    <td className={td} dir="ltr">{omr(va)}</td><td className={td} dir="ltr">{omr(sc)}</td><td className={td} dir="ltr">{vehOdoLast(db, v.id).toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+
+      {tab === "access" && (
+        <Card className="p-4">
+          <div className="flex flex-wrap justify-between items-end gap-3 mb-3">
+            <div>
+              <h3 className="font-bold text-slate-800">{t("المناديب اللي يشوفون السيارات في بوابتهم", "Riders who see vehicles in their portal")}</h3>
+              <p className="text-xs text-slate-500 mt-1">{t("غير المختارين ما يشوفون أي شي عن السيارات والشفتات والمخالفات. مختار: " + vehAllowed.length, "Only checked riders see vehicles, shifts and violations. Selected: " + vehAllowed.length)}</p>
+            </div>
+            <div className="w-64"><Field label={t("بحث بالاسم", "Search by name")}><input className={inputCls} value={accQ} onChange={(e) => setAccQ(e.target.value)} /></Field></div>
+          </div>
+          <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-100">
+            {riders.filter((r) => !accQ || String(r.name || "").toLowerCase().includes(accQ.toLowerCase())).map((r) => (
+              <label key={r.id} className="flex items-center gap-3 py-2 px-1 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" checked={vehAllowed.includes(r.id)} onChange={() => toggleVehAccess(r.id)} />
+                <span className="flex-1 text-sm font-semibold text-slate-800">{r.name}</span>
+                <span className="text-xs text-slate-500" dir="ltr">{r.companyId || r.phone || ""}</span>
+                <span className="text-xs text-slate-500">{r.type || ""}</span>
+              </label>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* نماذج: سيارة */}
+      <Modal open={!!vf} onClose={() => setVf(null)} title={t("بيانات السيارة", "Vehicle details")}>
+        {vf && <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("رقم اللوحة", "Plate")}><input className={inputCls} dir="ltr" value={vf.plate} onChange={(e) => setVf({ ...vf, plate: e.target.value })} /></Field>
+            <Field label={t("الموديل", "Model")}><input className={inputCls} value={vf.model} onChange={(e) => setVf({ ...vf, model: e.target.value })} /></Field>
+            <Field label={t("المنطقة", "Area")}><input className={inputCls} value={vf.area} onChange={(e) => setVf({ ...vf, area: e.target.value })} /></Field>
+            <Field label={t("الحالة", "Status")}><select className={inputCls} value={vf.status} onChange={(e) => setVf({ ...vf, status: e.target.value })}>{Object.entries(VEH_STATUS).map(([k, v]) => <option key={k} value={k}>{LANG === "en" ? v[1] : v[0]}</option>)}</select></Field>
+            <Field label={t("عداد البداية (عند التسجيل)", "Initial odometer")}><input type="number" className={inputCls} dir="ltr" value={vf.odoBase} onChange={(e) => setVf({ ...vf, odoBase: e.target.value })} /></Field>
+            <Field label={t("صيانة كل (كم)", "Service every (km)")}><input type="number" className={inputCls} dir="ltr" value={vf.serviceEveryKm} onChange={(e) => setVf({ ...vf, serviceEveryKm: e.target.value })} /></Field>
+            <Field label={t("عداد آخر صيانة", "Odometer at last service")}><input type="number" className={inputCls} dir="ltr" value={vf.lastServiceOdo} onChange={(e) => setVf({ ...vf, lastServiceOdo: e.target.value })} /></Field>
+            <div />
+            <Field label={t("انتهاء التأمين", "Insurance expiry")}><input type="date" className={inputCls} value={vf.insuranceExpiry} onChange={(e) => setVf({ ...vf, insuranceExpiry: e.target.value })} /></Field>
+            <Field label={t("انتهاء الاستمارة", "Registration expiry")}><input type="date" className={inputCls} value={vf.regExpiry} onChange={(e) => setVf({ ...vf, regExpiry: e.target.value })} /></Field>
+          </div>
+          <Btn onClick={saveVehicle}>{t("حفظ", "Save")}</Btn>
+        </div>}
+      </Modal>
+
+      {/* نماذج: شفت */}
+      <Modal open={!!sf} onClose={() => setSf(null)} title={t("الشفت", "Shift")}>
+        {sf && <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={sf.date} onChange={(e) => setSf({ ...sf, date: e.target.value })} /></Field>
+            <Field label={t("اسم الشفت", "Shift name")}><input className={inputCls} value={sf.label} onChange={(e) => setSf({ ...sf, label: e.target.value })} /></Field>
+            <Field label={t("السيارة", "Vehicle")}><select className={inputCls} value={sf.vehicleId} onChange={(e) => setSf({ ...sf, vehicleId: e.target.value })}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
+            <Field label={t("المندوب", "Rider")}><select className={inputCls} value={sf.riderId} onChange={(e) => setSf({ ...sf, riderId: e.target.value })}><option value="">—</option>{riders.filter((r) => r.status !== "Inactive" && r.status !== "inactive").map((r) => <option key={r.id} value={r.id}>{r.name} · {r.type || ""}</option>)}</select></Field>
+            <Field label={t("من", "From")}><input type="time" className={inputCls} value={sf.start} onChange={(e) => setSf({ ...sf, start: e.target.value })} /></Field>
+            <Field label={t("إلى", "To")}><input type="time" className={inputCls} value={sf.end} onChange={(e) => setSf({ ...sf, end: e.target.value })} /></Field>
+            <Field label={t("عداد البداية", "Start odometer")}><input type="number" className={inputCls} dir="ltr" value={sf.odoStart} onChange={(e) => setSf({ ...sf, odoStart: e.target.value })} /></Field>
+            <Field label={t("عداد النهاية", "End odometer")}><input type="number" className={inputCls} dir="ltr" value={sf.odoEnd} onChange={(e) => setSf({ ...sf, odoEnd: e.target.value })} /></Field>
+          </div>
+          <p className="text-xs text-slate-500">{t("العدادات تقدر تتركها فاضية، والمندوب يعبّيها من بوابته. وتقدر تعدّلها أنت لاحقاً.", "Odometers can stay empty; the rider fills them from the portal. You can edit them later.")}</p>
+          <Btn onClick={saveShift}>{t("حفظ الشفت", "Save shift")}</Btn>
+        </div>}
+      </Modal>
+
+      {/* نماذج: مخالفة */}
+      <Modal open={!!vio} onClose={() => setVio(null)} title={t("المخالفة", "Violation")}>
+        {vio && <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("السيارة", "Vehicle")}><select className={inputCls} value={vio.vehicleId} onChange={(e) => setVio({ ...vio, vehicleId: e.target.value, shiftId: "" })}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
+            <Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={vio.date} onChange={(e) => setVio({ ...vio, date: e.target.value, shiftId: "" })} /></Field>
+            <Field label={t("الشفت (يحدد المندوب)", "Shift (sets the rider)")}><select className={inputCls} value={vio.shiftId} onChange={(e) => setVio({ ...vio, shiftId: e.target.value })}><option value="">—</option>{shiftOpts(vio.vehicleId, vio.date).map((s) => <option key={s.id} value={s.id}>{s.label} · {s.start}-{s.end} · {nameOf(s.riderId)}</option>)}</select></Field>
+            <Field label={t("الوقت", "Time")}><input type="time" className={inputCls} value={vio.time} onChange={(e) => setVio({ ...vio, time: e.target.value })} /></Field>
+            <Field label={t("نوع المخالفة", "Violation type")}><input className={inputCls} value={vio.kind} onChange={(e) => setVio({ ...vio, kind: e.target.value })} /></Field>
+            <Field label={t("المبلغ (ر.ع) — يُخصم إذا اعتمدت", "Amount (OMR) — deducted if approved")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={vio.amount} onChange={(e) => setVio({ ...vio, amount: e.target.value })} /></Field>
+          </div>
+          <Field label={t("ملاحظة", "Note")}><input className={inputCls} value={vio.note} onChange={(e) => setVio({ ...vio, note: e.target.value })} /></Field>
+          <Btn onClick={saveViolation}>{t("حفظ المخالفة", "Save violation")}</Btn>
+        </div>}
+      </Modal>
+
+      {/* نماذج: صيانة */}
+      <Modal open={!!svc} onClose={() => setSvc(null)} title={t("صيانة", "Maintenance")}>
+        {svc && <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("السيارة", "Vehicle")}><select className={inputCls} value={svc.vehicleId} onChange={(e) => setSvc({ ...svc, vehicleId: e.target.value })}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
+            <Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={svc.date} onChange={(e) => setSvc({ ...svc, date: e.target.value })} /></Field>
+            <Field label={t("العداد وقت الصيانة", "Odometer at service")}><input type="number" className={inputCls} dir="ltr" value={svc.odo} onChange={(e) => setSvc({ ...svc, odo: e.target.value })} /></Field>
+            <Field label={t("التكلفة (ر.ع)", "Cost (OMR)")}><input type="number" step="0.001" className={inputCls} dir="ltr" value={svc.cost} onChange={(e) => setSvc({ ...svc, cost: e.target.value })} /></Field>
+            <Field label={t("النوع", "Type")}><input className={inputCls} value={svc.kind} onChange={(e) => setSvc({ ...svc, kind: e.target.value })} /></Field>
+            <Field label={t("ملاحظة", "Note")}><input className={inputCls} value={svc.note} onChange={(e) => setSvc({ ...svc, note: e.target.value })} /></Field>
+          </div>
+          <Btn onClick={saveService}>{t("حفظ", "Save")}</Btn>
+        </div>}
+      </Modal>
     </div>
   );
 }
@@ -5105,6 +5621,7 @@ function sidebarFor(user, db) {
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
   items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
   if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "tasks", label: t("إدارة المهام", "Task Management"), kind: "tasks" });
+  if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" });
   const myRec = hrRecordFor(db, user);
   if (myRec) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
   COMPANIES.forEach((c) => items.push({ key: "company:" + c, label: cLabel(c), kind: "company", company: c }));
@@ -5716,26 +6233,25 @@ export default function App() {
       let out = sv.filter((x) => !(prevById.has(x.id) && !nextById.has(x.id))); // محذوف من الأدمن
       nextVal.forEach((nx) => {
         const px = prevById.get(nx.id);
-        if (!px || JSON.stringify(px) !== JSON.stringify(nx)) { // مُضاف أو مُعدّل من الأدمن
-          const idx = out.findIndex((o) => o.id === nx.id);
-          if (idx >= 0) out[idx] = nx; else out.push(nx);
-        }
+        // مُضاف من الأدمن: نضيفه. مُعدّل: نطبّق بس الحقول اللي غيّرها الأدمن فعلاً (ما نمسح حقول المندوب)
+        const idx = out.findIndex((o) => o.id === nx.id);
+        if (!px) { if (idx >= 0) out[idx] = { ...out[idx], ...nx }; else out.push(nx); return; }
+        const diff = {};
+        Object.keys(nx).forEach((k) => { if (JSON.stringify(nx[k]) !== JSON.stringify(px[k])) diff[k] = nx[k]; });
+        if (Object.keys(diff).length) { if (idx >= 0) out[idx] = { ...out[idx], ...diff }; else out.push(nx); }
       });
       return out;
     };
     (async () => {
-      const fresh = await supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single();
-      if (fresh.error || !fresh.data) {
-        const r = await saveDB(next, at);
-        if (r.error) { console.error(r.error); failSave(); }
-        return;
+      // الدمج يصير على السيرفر داخل قفل الصف (app_state_merge): ما يضيع إيصال أو قرار حتى لو صار بنفس اللحظة
+      let res = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        res = await supabase.rpc("app_state_merge", { p_next: next, p_prev: prev, p_at: at });
+        if (!res.error && res.data) break;
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
-      const srv = (fresh.data.data) || {};
-      const merged = { ...srv };
-      changed.forEach((k) => { merged[k] = mergeKey(srv[k], prev[k], next[k]); });
-      const r = await saveDB(merged, at);
-      if (r.error) { console.error(r.error); return failSave(); }
-      const finalDb = normalizeDB(merged);
+      if (!res || res.error || !res.data) { console.error(res && res.error); return failSave(); }
+      const finalDb = normalizeDB(res.data);
       dbRef.current = finalDb; setDb(finalDb);
     })();
   };
@@ -5823,6 +6339,7 @@ export default function App() {
     if (activeItem.kind === "myhr") return <MyHRView db={db} save={save} user={user} />;
     if (activeItem.kind === "regstats") return <RegStats db={db} />;
     if (activeItem.kind === "tasks" || activeItem.kind === "mytasks") return <TasksModule db={db} mode={activeItem.kind} />;
+    if (activeItem.kind === "vehicles") return <VehiclesModule db={db} save={save} user={user} />;
     if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} readOnly={!!(user && user.regViewer && !user.regAgent && user.role !== "Admin" && user.role !== "Operations Manager")} />;
     if (activeItem.kind === "areas") return <AreasWindow db={db} save={save} />;
     if (activeItem.kind === "banks") return <BanksWindow db={db} save={save} />;
