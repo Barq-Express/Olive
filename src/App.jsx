@@ -1672,6 +1672,16 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     setDedEdit(null);
     if (onRefresh) onRefresh();
   };
+  // إلغاء خصم: يصير مرفوض (ما يُحسب بالمستحقات). إذا كان من مخالفة سيارة، ترجع المخالفة قيد المراجعة
+  const undoDed = (d) => {
+    if (!window.confirm(t("إلغاء هذا الخصم؟ ما بيتحسب من راتب المندوب", "Cancel this deduction? It will no longer be deducted from the rider's pay"))) return;
+    const me = (user && (user.name || user.email)) || "";
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const dedList = (db.codDeductions || []).map((x) => x.id === d.id ? { ...x, status: "rejected", editedBy: me, editedAt: stamp } : x);
+    const viols = (db.vehViolations || []).map((v) => (d.violationId && v.id === d.violationId ? { ...v, status: "pending", deductionId: "", decidedBy: me, decidedAt: stamp } : v));
+    save({ ...db, codDeductions: dedList, vehViolations: viols });
+    if (onRefresh) onRefresh();
+  };
   const openDed = (r) => { setDedFor({ rider: r }); setDedAmount(""); setDedMonth(new Date().toISOString().slice(0, 7)); setDedDate(todayStr()); setDedReason(""); setDedErr(""); };
   const submitDed = () => {
     const amt = Number(dedAmount);
@@ -2023,7 +2033,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                         <td className="px-3 font-semibold text-slate-800">{riderName(r.riderId)}</td>
                         <td className="px-3">{kindPill(r.kind)}</td>
                         <td className="px-3 font-semibold" style={{ color: r.amt < 0 ? "#c0341d" : "#0f9d58" }}>{r.amt > 0 ? "+" : ""}{omr(r.amt)}</td>
-                        <td className="px-3 text-slate-600 whitespace-normal align-top" style={{ minWidth: 240, maxWidth: 340, lineHeight: 1.5 }}>{r.reason || "—"}{r.kind === "ded" && isFinanceU ? <button onClick={() => { const dd = (db.codDeductions || []).find((d) => d.id === r.id) || {}; setDedEdit({ id: r.id, date: dd.date || String(dd.at || "").slice(0, 10) || ((dd.month || "") + "-01"), amount: String(Math.abs(r.amt)), reason: dd.reason || "" }); }} title={t("تعديل الخصم", "Edit deduction")} className="ms-2 text-slate-400 hover:text-slate-700"><Pencil size={13} /></button> : null}{r.decidedBy ?<div className="text-[10px] text-slate-400">{t("اعتمده", "Approved by")}: {r.decidedBy}</div> : null}</td>
+                        <td className="px-3 text-slate-600 whitespace-normal align-top" style={{ minWidth: 240, maxWidth: 340, lineHeight: 1.5 }}>{r.reason || "—"}{r.kind === "ded" && isFinanceU ? <button onClick={() => { const dd = (db.codDeductions || []).find((d) => d.id === r.id) || {}; setDedEdit({ id: r.id, date: dd.date || String(dd.at || "").slice(0, 10) || ((dd.month || "") + "-01"), amount: String(Math.abs(r.amt)), reason: dd.reason || "" }); }} title={t("تعديل الخصم", "Edit deduction")} className="ms-2 text-slate-400 hover:text-slate-700"><Pencil size={13} /></button> : null}{r.kind === "ded" && isFinanceU && r.status !== "rejected" ? <button onClick={() => undoDed({ id: r.id, violationId: ((db.codDeductions || []).find((d) => d.id === r.id) || {}).violationId })} title={t("إلغاء الخصم", "Cancel deduction")} className="ms-2 text-xs font-bold text-red-600 hover:text-red-800">{t("إلغاء", "Cancel")}</button> : null}{r.decidedBy ?<div className="text-[10px] text-slate-400">{t("اعتمده", "Approved by")}: {r.decidedBy}</div> : null}</td>
                         <td className="px-3 text-slate-600">{r.by}</td>
                         <td className="px-3">{statPill(r.status)}</td>
                       </tr>
