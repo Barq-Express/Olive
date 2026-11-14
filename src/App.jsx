@@ -4289,6 +4289,37 @@ const vehOdoLast = (db, vehId) => {
 const vehDaysTo = (d) => (d ? Math.round((new Date(d + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000) : null);
 const withRow = (arr, row) => { const list = arr || []; return list.some((x) => x.id === row.id) ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row]; };
 
+// اختيار مندوب بالبحث: الاسم أو الايدي أو الهاتف
+function RiderPicker({ riders, value, onChange }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const sel = riders.find((r) => r.id === value);
+  const low = (s) => String(s || "").toLowerCase().trim();
+  const dig = (s) => String(s || "").replace(/\D/g, "");
+  const match = (r) => {
+    const qq = low(q); if (!qq) return true;
+    const qd = dig(q);
+    return low(r.name).includes(qq) || low(r.companyId).includes(qq) || low("olive-" + (r.companyId || "")).includes(qq) || (qd !== "" && dig(r.phone).includes(qd));
+  };
+  const list = riders.filter(match).slice(0, 12);
+  return (
+    <div className="relative">
+      <input className={inputCls} value={open ? q : (sel ? sel.name : "")} placeholder={t("ابحث بالاسم أو الايدي أو الهاتف", "Search by name, ID or phone")}
+        onFocus={() => { setOpen(true); setQ(""); }} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onBlur={() => setTimeout(() => setOpen(false), 150)} />
+      {open && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {list.map((r) => (
+            <button key={r.id} type="button" onMouseDown={(e) => { e.preventDefault(); onChange(r.id); setOpen(false); setQ(""); }} className="block w-full text-start px-3 py-2 text-sm hover:bg-slate-50">
+              <b>{r.name}</b> <span className="text-xs text-slate-500" dir="ltr">{r.companyId ? "Olive-" + r.companyId : ""} {r.phone || ""}</span>
+            </button>
+          ))}
+          {list.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">{t("ما فيه نتائج", "No results")}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VehiclesModule({ db, save, user }) {
   const [tab, setTab] = useState("fleet");
   const [vf, setVf] = useState(null);   // نموذج سيارة
@@ -4570,10 +4601,10 @@ function VehiclesModule({ db, save, user }) {
               <h3 className="font-bold text-slate-800">{t("المناديب اللي يشوفون السيارات في بوابتهم", "Riders who see vehicles in their portal")}</h3>
               <p className="text-xs text-slate-500 mt-1">{t("غير المختارين ما يشوفون أي شي عن السيارات والشفتات والمخالفات. مختار: " + vehAllowed.length, "Only checked riders see vehicles, shifts and violations. Selected: " + vehAllowed.length)}</p>
             </div>
-            <div className="w-64"><Field label={t("بحث بالاسم", "Search by name")}><input className={inputCls} value={accQ} onChange={(e) => setAccQ(e.target.value)} /></Field></div>
+            <div className="w-64"><Field label={t("بحث بالاسم أو الايدي أو الهاتف", "Search by name, ID or phone")}><input className={inputCls} value={accQ} onChange={(e) => setAccQ(e.target.value)} /></Field></div>
           </div>
           <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-100">
-            {riders.filter((r) => !accQ || String(r.name || "").toLowerCase().includes(accQ.toLowerCase())).map((r) => (
+            {riders.filter((r) => { if (!accQ) return true; const qq = accQ.toLowerCase().trim(); const qd = accQ.replace(/\D/g, ""); return String(r.name || "").toLowerCase().includes(qq) || String(r.companyId || "").toLowerCase().includes(qq) || (qd !== "" && String(r.phone || "").replace(/\D/g, "").includes(qd)); }).map((r) => (
               <label key={r.id} className="flex items-center gap-3 py-2 px-1 cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" checked={vehAllowed.includes(r.id)} onChange={() => toggleVehAccess(r.id)} />
                 <span className="flex-1 text-sm font-semibold text-slate-800">{r.name}</span>
@@ -4611,7 +4642,7 @@ function VehiclesModule({ db, save, user }) {
             <Field label={t("التاريخ", "Date")}><input type="date" className={inputCls} value={sf.date} onChange={(e) => setSf({ ...sf, date: e.target.value })} /></Field>
             <Field label={t("اسم الشفت", "Shift name")}><input className={inputCls} value={sf.label} onChange={(e) => setSf({ ...sf, label: e.target.value })} /></Field>
             <Field label={t("السيارة", "Vehicle")}><select className={inputCls} value={sf.vehicleId} onChange={(e) => setSf({ ...sf, vehicleId: e.target.value })}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate}</option>)}</select></Field>
-            <Field label={t("المندوب", "Rider")}><select className={inputCls} value={sf.riderId} onChange={(e) => setSf({ ...sf, riderId: e.target.value })}><option value="">—</option>{riders.filter((r) => r.status !== "Inactive" && r.status !== "inactive").map((r) => <option key={r.id} value={r.id}>{r.name} · {r.type || ""}</option>)}</select></Field>
+            <Field label={t("المندوب (المصرّح لهم بالسيارات فقط)", "Rider (vehicle-authorized only)")}><RiderPicker riders={riders.filter((r) => vehAllowed.includes(r.id) || r.id === sf.riderId)} value={sf.riderId} onChange={(id) => setSf({ ...sf, riderId: id })} /></Field>
             <Field label={t("من", "From")}><input type="time" className={inputCls} value={sf.start} onChange={(e) => setSf({ ...sf, start: e.target.value })} /></Field>
             <Field label={t("إلى", "To")}><input type="time" className={inputCls} value={sf.end} onChange={(e) => setSf({ ...sf, end: e.target.value })} /></Field>
             <Field label={t("عداد البداية", "Start odometer")}><input type="number" className={inputCls} dir="ltr" value={sf.odoStart} onChange={(e) => setSf({ ...sf, odoStart: e.target.value })} /></Field>
