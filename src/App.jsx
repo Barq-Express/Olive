@@ -2021,7 +2021,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
                 <span className="px-2.5 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">{t("إجمالي الخصومات", "Total deductions")}: {omr(Math.abs(totDed))}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">{t("صافي تعديلات COD", "Net COD adjust")}: {totAdj >= 0 ? "+" : ""}{omr(totAdj)}</span>
                 <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-semibold">{t("عدد العمليات", "Records")}: {flt.length}</span>
-                <Btn kind="ghost" size="sm" onClick={() => exportExcel(flt.map((r) => ({ التاريخ: r.at, المندوب: riderName(r.riderId), النوع: r.kind === "ded" ? "خصم راتب" : "تعديل COD", المبلغ: r.amt, السبب: r.reason, بواسطة: r.by, الحالة: r.status === "approved" ? "معتمد" : r.status === "pending" ? "قيد الاعتماد" : "مرفوض", اعتمده: r.decidedBy || "" })), "DeductionsLog_" + company)}><Download size={14} /> Excel</Btn>
+                <Btn kind="ghost" size="sm" onClick={() => exportExcel(flt.map((r) => ({ التاريخ: r.at, المندوب: riderName(r.riderId), ايدي_المندوب: db.riders.find((x) => x.id === r.riderId)?.companyId || "", النوع: r.kind === "ded" ? "خصم راتب" : "تعديل COD", المبلغ: r.amt, السبب: r.reason, بواسطة: r.by, الحالة: r.status === "approved" ? "معتمد" : r.status === "pending" ? "قيد الاعتماد" : "مرفوض", اعتمده: r.decidedBy || "" })), "DeductionsLog_" + company)}><Download size={14} /> Excel</Btn>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm whitespace-nowrap">
