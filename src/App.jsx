@@ -2487,7 +2487,7 @@ function AttendanceTab({ company, db, save }) {
 function ReportsScoped({ db, company }) {
   const [type, setType] = useState("cod");
   const [pFrom, setPFrom] = useState(""); const [pTo, setPTo] = useState(""); const [pType, setPType] = useState("Freelancer"); const [pArea, setPArea] = useState("all");
-  const types = { period: t("مندوبي فترة (حسب التاريخ)", "Riders in Period"), cod: tr("تقرير COD"), notworked: tr("لم يعملوا / غير نشطين"), freelancer: tr("مستحقات الفريلانسر"), fulltime: tr("رواتب Full Time"), riders: tr("كل المناديب") };
+  const types = { period: t("مندوبي فترة (حسب التاريخ)", "Riders in Period"), fl5: t("فريلانسر مسقط — 5 ساعات فأكثر (للفترة)", "Muscat freelancers — 5h+ (period)"), cod: tr("تقرير COD"), notworked: tr("لم يعملوا / غير نشطين"), freelancer: tr("مستحقات الفريلانسر"), fulltime: tr("رواتب Full Time"), riders: tr("كل المناديب") };
   const rs = db.riders.filter((r) => (!company || r.company === company) && (pArea === "all" || (r.area || "") === pArea));
   const repAreas = Array.from(new Set(db.riders.filter((r) => !company || r.company === company).map((r) => r.area).filter(Boolean))).sort();
   // حساب طلبات/COD/حقوق مندوب ضمن فترة (حسب تاريخ الشيت)
@@ -2501,6 +2501,18 @@ function ReportsScoped({ db, company }) {
     return { orders, cod, dues };
   };
   const rows = useMemo(() => {
+    if (type === "fl5") {
+      const inRange = (d) => { const s = String(d || "").slice(0, 10); return (!pFrom || s >= pFrom) && (!pTo || s <= pTo); };
+      return db.riders.filter((r) => (!company || r.company === company) && riderTypesIn(r, pFrom, pTo).includes("Freelancer") && /مسقط|muscat/i.test(String(r.area || "")))
+        .map((r) => {
+          let hrs = 0, orders = 0;
+          db.imports.filter((im) => (!company || im.company === company) && inRange(im.date)).forEach((im) => { const rr = im.results.find((x) => x.riderId === r.id); if (rr) { hrs += Number(rr.hours) || 0; orders += Number(rr.orders) || 0; } });
+          return { r, hrs, orders };
+        })
+        .filter((x) => x.hrs >= 5)
+        .sort((a, b) => b.hrs - a.hrs)
+        .map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone || "", المنطقة: x.r.area || "", النوع: "Freelancer", الساعات: Math.round(x.hrs * 100) / 100, الطلبات: x.orders, من: pFrom || "", إلى: pTo || "" }));
+    }
     if (type === "period") return rs.filter((r) => pType === "all" || riderTypesIn(r, pFrom, pTo).includes(pType)).map((r) => { const p = periodStats(r.id); return { r, ...p }; }).filter((x) => x.orders > 0 || x.cod > 0).map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone, المنطقة: x.r.area || "—", النوع: riderTypesIn(x.r, pFrom, pTo).join(" / "), الطلبات: x.orders, COD_للفترة: x.cod, الحقوق_للفترة: x.dues }));
     if (type === "cod") return rs.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), COD_للتحويل: m.codToTransfer, المحوّل: m.transferred, المتبقي: m.owed }; });
     if (type === "notworked") return rs.filter((r) => r.status === "Active" && daysSince(r.lastWorked) >= NO_WORK_DAYS).map((r) => ({ المندوب: r.name, الشركة: cLabel(r.company), آخر_عمل: r.lastWorked || "—", الأيام: daysSince(r.lastWorked) }));
@@ -2514,7 +2526,7 @@ function ReportsScoped({ db, company }) {
       <Card className="p-5"><div className="flex items-center justify-between gap-3 flex-wrap">
         <Field label={tr("نوع التقرير")}><select className={inputCls + " w-72"} value={type} onChange={(e) => setType(e.target.value)}>{Object.entries(types).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
         <Field label={t("المنطقة", "Area")}><select className={inputCls} value={pArea} onChange={(e) => setPArea(e.target.value)}><option value="all">{t("كل المناطق", "All areas")}</option>{repAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select></Field>
-        {type === "period" && <>
+        {(type === "period" || type === "fl5") && <>
           <Field label={t("من تاريخ", "From")}><input type="date" className={inputCls} value={pFrom} onChange={(e) => setPFrom(e.target.value)} /></Field>
           <Field label={t("إلى تاريخ", "To")}><input type="date" className={inputCls} value={pTo} onChange={(e) => setPTo(e.target.value)} /></Field>
           <Field label={t("النوع", "Type")}><select className={inputCls} value={pType} onChange={(e) => setPType(e.target.value)}><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="all">{t("الكل", "All")}</option></select></Field>
