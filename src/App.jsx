@@ -3200,6 +3200,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const myShifts = (db.vehShifts || []).filter((s) => s.riderId === riderId).sort((a, b) => (String(b.date) + String(b.start)).localeCompare(String(a.date) + String(a.start))).slice(0, 30);
   const myViols = (db.vehViolations || []).filter((x) => x.riderId === riderId && x.status !== "rejected");
   const submitOdo = (s, kind) => {
+    if (kind === "end") return setOdoMsg(t("إنهاء الشفت تسويه الإدارة", "Only the admin can end the shift"));
     const val = odoIn[s.id];
     if (val === undefined || String(val).trim() === "") return setOdoMsg(t("اكتب قراءة العداد", "Enter the odometer reading"));
     const ph = shots[s.id] || {};
@@ -3217,7 +3218,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
       .then(({ data, error }) => {
         setOdoBusy("");
         if (error || !data) return setOdoMsg(t("تعذّر الإرسال، حاول مرة أخرى", "Failed, try again"));
-        const errs = { not_found: t("الشفت غير موجود", "Shift not found"), not_yours: t("هذا الشفت ليس لك", "Not your shift"), already_closed: t("الشفت مغلق ولا يقبل تعديل", "Shift is closed"), start_too_low: t("العداد أقل من آخر قراءة للسيارة", "Reading is lower than the last reading"), end_before_start: t("عداد النهاية أقل من البداية", "End reading is lower than start"), no_start: t("سجّل عداد البداية أولاً", "Record the start reading first"), bad_odo: t("قراءة غير صحيحة", "Invalid reading") };
+        const errs = { not_found: t("الشفت غير موجود", "Shift not found"), not_yours: t("هذا الشفت ليس لك", "Not your shift"), already_closed: t("الشفت مغلق ولا يقبل تعديل", "Shift is closed"), start_too_low: t("العداد أقل من آخر قراءة للسيارة", "Reading is lower than the last reading"), end_before_start: t("عداد النهاية أقل من البداية", "End reading is lower than start"), no_start: t("سجّل عداد البداية أولاً", "Record the start reading first"), bad_odo: t("قراءة غير صحيحة", "Invalid reading"), too_early: t("ما تقدر تنهي الشفت قبل وقته", "You can't end the shift before its time") };
         if (data.error) return setOdoMsg("⚠️ " + (errs[data.error] || data.error));
         setOdoIn((cur) => ({ ...cur, [s.id]: "" }));
         setOdoMsg(t("✅ تم تسجيل العداد", "✅ Saved"));
@@ -3378,9 +3379,9 @@ function RiderPortal({ db, riderId, creds, refresh }) {
                     <div className="text-xs text-slate-500 mb-2" dir="ltr">{s.start} - {s.end}</div>
                     {!closed && (
                       <div className="flex gap-2 items-center flex-wrap">
-                        <span className="text-xs text-slate-600">{started ? t("عداد البداية: " + s.odoStart + " — سجّل النهاية", "Start: " + s.odoStart + " — enter end") : t("سجّل عداد البداية", "Enter start odometer")}</span>
-                        <input type="number" dir="ltr" className={inputCls} style={{ width: 120 }} value={odoIn[s.id] ?? ""} onChange={(e) => setOdoIn({ ...odoIn, [s.id]: e.target.value })} placeholder="km" />
-                        <Btn size="sm" onClick={() => submitOdo(s, started ? "end" : "start")} disabled={odoBusy === s.id}>{started ? tr("إنهاء الشفت") : t("استلام السيارة وبدء الشفت", "Receive car & start shift")}</Btn>
+                        <span className="text-xs text-slate-600">{started ? t("عداد البداية: " + s.odoStart + " — الشفت جاري، الإدارة تنهيه", "Start: " + s.odoStart + " — running, admin will end it") : t("سجّل عداد البداية", "Enter start odometer")}</span>
+                        {!started && <input type="number" dir="ltr" className={inputCls} style={{ width: 120 }} value={odoIn[s.id] ?? ""} onChange={(e) => setOdoIn({ ...odoIn, [s.id]: e.target.value })} placeholder="km" />}
+                        {!started && <Btn size="sm" onClick={() => submitOdo(s, "start")} disabled={odoBusy === s.id}>{t("استلام السيارة وبدء الشفت", "Receive car & start shift")}</Btn>}
                         {!started && (
                           <div className="w-full grid grid-cols-2 gap-2 mt-1">
                             {SHOT_SLOTS.map(([k, label]) => { const f = (shots[s.id] || {})[k]; return (
@@ -4409,11 +4410,9 @@ function VehiclesModule({ db, save, user }) {
     if (n < a) n += 1440;
     const early = n < b;
     let reason = "";
-    if (early) {
-      reason = window.prompt(t("الشفت توقف قبل وقت النهاية (" + s.end + "). اكتب السبب:", "Stopped before scheduled end (" + s.end + "). Reason:"), "");
-      if (reason === null) return;
-      if (!reason.trim()) return alert(t("لازم تكتب السبب", "A reason is required"));
-    }
+    reason = window.prompt(early ? t("الشفت توقف قبل وقت النهاية (" + s.end + "). اكتب السبب:", "Stopped before scheduled end (" + s.end + "). Reason:") : t("اكتب سبب إنهاء الشفت:", "Reason for ending the shift:"), "");
+    if (reason === null) return;
+    if (!reason.trim()) return alert(t("لازم تكتب السبب", "A reason is required"));
     const row = { ...s, odoEnd, km: odoEnd - sOdoStart, status: "closed", stoppedAt: nowHM, stoppedEarly: early, stopReason: early ? reason.trim() : "", editedBy: me, editedAt: stamp() };
     save({ ...db, vehShifts: withRow(shifts, row) });
   };
