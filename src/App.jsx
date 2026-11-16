@@ -510,6 +510,7 @@ function normalizeDB(db) {
     vehViolations: db.vehViolations || [],   // مخالفات السيارات (قرار الأدمن)
     vehService: db.vehService || [],         // سجل الصيانة
     vehRiderIds: db.vehRiderIds || [],       // المناديب المصرّح لهم يشوفون السيارات والشفتات في بوابتهم
+    vehManager: db.vehManager || "",         // مسؤول السيارات (حساب موظف)
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
   };
 }
