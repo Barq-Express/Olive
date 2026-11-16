@@ -386,6 +386,18 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const omr = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + " OMR";
 const daysSince = (d) => (!d ? Infinity : Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 const normPhone = (v) => String(v || "").replace(/[^0-9]/g, "").replace(/^968/, "").replace(/^0+/, "");
+// أنواع المندوب اللي كان عليها خلال فترة معيّنة (يدعم التحويل بين فريلانسر وفول تايم)
+const riderTypesIn = (r, from, to) => {
+  const log = r.typeLog && r.typeLog.length ? r.typeLog : [{ type: r.type, from: "" }];
+  const lo = from || "0000-00-00", hi = to || "9999-12-31";
+  const out = new Set();
+  log.forEach((seg, i) => {
+    const segFrom = seg.from || "0000-00-00";
+    const segTo = log[i + 1] ? log[i + 1].from : "9999-12-31";
+    if (segFrom <= hi && lo < segTo) out.add(seg.type);
+  });
+  return [...out];
+};
 const normType = (v, def) => { const s = String(v || "").trim().toLowerCase(); if (!s) return def; if (s.includes("free") || s.includes(tr("فري"))) return "Freelancer"; if (s.includes("full") || s.includes(tr("فول")) || s.includes(tr("ثابت")) || s.includes(tr("دوام"))) return "Full Time"; return def; };
 // توحيد قيمة المركبة المستوردة إلى القيمة المعتمدة (Car/Bike) حتى يعمل الفلتر
 const normVehicle = (v) => { const s = String(v || "").trim().toLowerCase(); if (!s) return ""; if (s.includes("سيار") || s.includes("car") || s.includes("سياره")) return "Car"; if (s.includes("دراج") || s.includes("دباج") || s.includes("دباب") || s.includes("bike") || s.includes("motor") || s.includes("scooter") || s.includes("سكوتر")) return "Bike"; return String(v).trim(); };
@@ -1189,6 +1201,19 @@ function Riders({ db, save, company, user }) {
     if (cid) { const idDup = db.riders.find((x) => x.id !== r.id && String(x.companyId || "").trim() === cid); if (idDup) return alert(t("يوجد مندوب بنفس ID التطبيق (" + idDup.name + "). لا يمكن التكرار.", "A rider with the same app ID already exists (" + idDup.name + "). Duplicate not allowed.")); }
     if (!r.username) r.username = r.phone;
     if (!r.id && !r.codAgent) { const pick = makeAgentPicker(db, r.company || company); r.codAgent = pick(); }
+    // سجل نوع المندوب: إذا تغيّر النوع (مثلاً فريلانسر → فول تايم) نسجل تاريخ التغيير عشان التقارير الزمنية تعرف النوع حق كل فترة
+    const oldR = r.id ? db.riders.find((x) => x.id === r.id) : null;
+    if (oldR) {
+      let log = oldR.typeLog && oldR.typeLog.length ? oldR.typeLog : [{ type: oldR.type, from: oldR.joinDate || "" }];
+      let hist = oldR.typeHistory || [];
+      if (oldR.type !== r.type) {
+        const at = new Date().toISOString().slice(0, 16).replace("T", " ");
+        log = [...log, { type: r.type, from: todayStr() }];
+        hist = [...hist, { from: oldR.type, to: r.type, at, by: (user && (user.name || user.email)) || "" }];
+      }
+      r.typeLog = log;
+      r.typeHistory = hist;
+    }
     const riders = r.id ? db.riders.map((x) => (x.id === r.id ? r : x)) : [...db.riders, { ...r, id: uid(), lastWorked: null }];
     save({ ...db, riders }); setEditing(null);
   };
@@ -1294,6 +1319,14 @@ function Riders({ db, save, company, user }) {
           <div className="grid grid-cols-2 gap-4">
             <Field label={tr("الاسم")}><input className={inputCls} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
             <Field label={tr("رقم الهاتف")}><input className={inputCls} dir="ltr" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></Field>
+            {editing.id && (editing.typeHistory || []).length > 0 && (
+              <div className="col-span-2 text-xs rounded-lg border border-slate-200 p-2 space-y-1">
+                <div className="font-bold text-slate-700">{t("سجل تغيير النوع", "Type change history")}</div>
+                {[...editing.typeHistory].reverse().map((h, i) => (
+                  <div key={i} className="text-slate-600" dir="ltr">{h.at} · {h.from} → {h.to} · {t("بواسطة", "by")}: {h.by || "—"}</div>
+                ))}
+              </div>
+            )}
             <Field label={tr("رقم المدني")}><input className={inputCls} dir="ltr" value={editing.civil || ""} onChange={(e) => setEditing({ ...editing, civil: e.target.value })} /></Field>
             <Field label={t("ID المندوب في الشركة", "Company Rider ID")}><input className={inputCls} dir="ltr" value={editing.companyId || ""} onChange={(e) => setEditing({ ...editing, companyId: e.target.value })} placeholder={t("مُعرّف المندوب من الشركة", "rider id from company")} /></Field>
             <Field label={t("الجنسية", "Nationality")}><select className={inputCls} value={natClass(editing.nationality)} onChange={(e) => setEditing({ ...editing, nationality: e.target.value === "omani" ? "عماني" : e.target.value === "foreign" ? (natClass(editing.nationality) === "foreign" ? editing.nationality : "أجنبي") : "" })}><option value="unknown">{t("— غير محدد —", "— unspecified —")}</option><option value="omani">{t("عماني", "Omani")}</option><option value="foreign">{t("أجنبي", "Foreign")}</option></select></Field>
@@ -2467,7 +2500,7 @@ function ReportsScoped({ db, company }) {
     return { orders, cod, dues };
   };
   const rows = useMemo(() => {
-    if (type === "period") return rs.filter((r) => pType === "all" || r.type === pType).map((r) => { const p = periodStats(r.id); return { r, ...p }; }).filter((x) => x.orders > 0 || x.cod > 0).map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone, المنطقة: x.r.area || "—", النوع: x.r.type, الطلبات: x.orders, COD_للفترة: x.cod, الحقوق_للفترة: x.dues }));
+    if (type === "period") return rs.filter((r) => pType === "all" || riderTypesIn(r, pFrom, pTo).includes(pType)).map((r) => { const p = periodStats(r.id); return { r, ...p }; }).filter((x) => x.orders > 0 || x.cod > 0).map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone, المنطقة: x.r.area || "—", النوع: riderTypesIn(x.r, pFrom, pTo).join(" / "), الطلبات: x.orders, COD_للفترة: x.cod, الحقوق_للفترة: x.dues }));
     if (type === "cod") return rs.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), COD_للتحويل: m.codToTransfer, المحوّل: m.transferred, المتبقي: m.owed }; });
     if (type === "notworked") return rs.filter((r) => r.status === "Active" && daysSince(r.lastWorked) >= NO_WORK_DAYS).map((r) => ({ المندوب: r.name, الشركة: cLabel(r.company), آخر_عمل: r.lastWorked || "—", الأيام: daysSince(r.lastWorked) }));
     if (type === "freelancer") return rs.filter((r) => r.type === "Freelancer").map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), الطلبات: m.orders, المستحق: m.earn }; });
@@ -4449,6 +4482,20 @@ function VehiclesModule({ db, save, user }) {
 
   return (
     <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-bold text-slate-800">{t("مسؤول السيارات", "Vehicles manager")}</span>
+          {user && user.role === "Admin" ? (
+            <select className={inputCls + " w-64"} value={db.vehManager || ""} onChange={(e) => save({ ...db, vehManager: e.target.value })}>
+              <option value="">{t("— بدون مسؤول (الأدمن فقط) —", "— none (admin only) —")}</option>
+              {Object.entries({ ...STAFF_BY_EMAIL, ...(db.staff || {}) }).filter(([, p]) => p && !p.disabled).map(([em, p]) => <option key={em} value={em}>{(p && p.name) || em}</option>)}
+            </select>
+          ) : (
+            <span className="text-sm text-slate-600">{db.vehManager || t("غير محدد", "Not set")}</span>
+          )}
+          <span className="text-xs text-slate-500">{t("يشوف قسم السيارات ويدير الشفتات والعدادات والمخالفات", "Sees the Vehicles section and manages shifts, odometers and violations")}</span>
+        </div>
+      </Card>
       <div className="flex flex-wrap gap-2">
         {tabs.map(([k, label]) => <button key={k} onClick={() => setTab(k)} className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ background: tab === k ? BRAND.navy : "#f1f5f9", color: tab === k ? "#fff" : "#334155" }}>{label}</button>)}
       </div>
@@ -5685,7 +5732,8 @@ function sidebarFor(user, db) {
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
   items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
   if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "tasks", label: t("إدارة المهام", "Task Management"), kind: "tasks" });
-  if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" });
+  const isVehManager = String(db.vehManager || "").trim().toLowerCase() !== "" && String(db.vehManager).trim().toLowerCase() === String(user.email || "").trim().toLowerCase();
+  if (user.role === "Admin" || user.role === "Operations Manager" || isVehManager) items.push({ key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" });
   const myRec = hrRecordFor(db, user);
   if (myRec) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
   COMPANIES.forEach((c) => items.push({ key: "company:" + c, label: cLabel(c), kind: "company", company: c }));
