@@ -510,7 +510,7 @@ function normalizeDB(db) {
     vehViolations: db.vehViolations || [],   // مخالفات السيارات (قرار الأدمن)
     vehService: db.vehService || [],         // سجل الصيانة
     vehRiderIds: db.vehRiderIds || [],       // المناديب المصرّح لهم يشوفون السيارات والشفتات في بوابتهم
-    vehManager: db.vehManager || "",         // مسؤول السيارات (حساب موظف)
+    vehManagers: Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []), // مسؤولو السيارات (حسابات موظفين)
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
   };
 }
@@ -4376,6 +4376,12 @@ function VehiclesModule({ db, save, user }) {
   const [vioFilter, setVioFilter] = useState("pending");
   const [accQ, setAccQ] = useState("");
   const vehAllowed = db.vehRiderIds || [];
+  const vehManagers = Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []);
+  const toggleVehManager = (em) => {
+    const key = (x) => String(x).trim().toLowerCase();
+    const has = vehManagers.some((x) => key(x) === key(em));
+    save({ ...db, vehManagers: has ? vehManagers.filter((x) => key(x) !== key(em)) : [...vehManagers, em] });
+  };
   const toggleVehAccess = (id) => save({ ...db, vehRiderIds: vehAllowed.includes(id) ? vehAllowed.filter((x) => x !== id) : [...vehAllowed, id] });
   const vehicles = db.vehicles || [], shifts = db.vehShifts || [], viols = db.vehViolations || [], svcs = db.vehService || [];
   const riders = db.riders || [];
@@ -4484,17 +4490,18 @@ function VehiclesModule({ db, save, user }) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-bold text-slate-800">{t("مسؤول السيارات", "Vehicles manager")}</span>
-          {user && user.role === "Admin" ? (
-            <select className={inputCls + " w-64"} value={db.vehManager || ""} onChange={(e) => save({ ...db, vehManager: e.target.value })}>
-              <option value="">{t("— بدون مسؤول (الأدمن فقط) —", "— none (admin only) —")}</option>
-              {Object.entries({ ...STAFF_BY_EMAIL, ...(db.staff || {}) }).filter(([, p]) => p && !p.disabled).map(([em, p]) => <option key={em} value={em}>{(p && p.name) || em}</option>)}
-            </select>
-          ) : (
-            <span className="text-sm text-slate-600">{db.vehManager || t("غير محدد", "Not set")}</span>
-          )}
-          <span className="text-xs text-slate-500">{t("يشوف قسم السيارات ويدير الشفتات والعدادات والمخالفات", "Sees the Vehicles section and manages shifts, odometers and violations")}</span>
+        <div className="font-bold text-slate-800 mb-1">{t("مسؤولو السيارات", "Vehicle managers")}</div>
+        <div className="text-xs text-slate-500 mb-3">{t("الموظفين المختارين يشوفون قسم السيارات كامل ويديرونه", "Selected staff can see and manage the whole Vehicles section")}</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {Object.entries({ ...STAFF_BY_EMAIL, ...(db.staff || {}) }).filter(([, p]) => p && !p.disabled).map(([em, p]) => {
+            const checked = vehManagers.some((x) => String(x).trim().toLowerCase() === String(em).trim().toLowerCase());
+            return (
+              <label key={em} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-slate-200" style={{ opacity: user && user.role === "Admin" ? 1 : 0.7 }}>
+                <input type="checkbox" disabled={!(user && user.role === "Admin")} checked={checked} onChange={() => toggleVehManager(em)} />
+                <span>{(p && p.name) || em}</span>
+              </label>
+            );
+          })}
         </div>
       </Card>
       <div className="flex flex-wrap gap-2">
@@ -5718,8 +5725,11 @@ function RegStats({ db }) {
 
 function sidebarFor(user, db) {
   const regItem = { key: "registration", label: t("تسجيل المناديب", "Registration"), kind: "registration" };
+  const vehItem = { key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" };
+  const vmList = Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []);
+  const isVehManager = vmList.some((x) => String(x).trim().toLowerCase() === String(user.email || "").trim().toLowerCase() && String(user.email || "").trim() !== "");
   // متابع تسجيل فقط: يشوف صفحة التسجيل ومهامه، بدون أي تبويب مناديب
-  if (user.role === "Registration") return [{ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" }, regItem];
+  if (user.role === "Registration") return [{ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" }, regItem, ...(isVehManager ? [vehItem] : [])];
   const statsItem = { key: "regstats", label: t("عدد التسجيل", "Registration count"), kind: "regstats" };
   if (user.role === "Supervisor") {
     const items = [{ key: "company:" + user.company, label: cLabel(user.company), kind: "company", company: user.company }];
@@ -5728,12 +5738,12 @@ function sidebarFor(user, db) {
     if (myRecS) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
     if (user.regAgent) items.push(regItem);
     if (user.regViewer && !user.regAgent) items.push(regItem);
+    if (isVehManager) items.push(vehItem);
     return items;
   }
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
   items.push({ key: "mytasks", label: t("مهامي", "My Tasks"), kind: "mytasks" });
   if (user.role === "Admin" || user.role === "Operations Manager") items.push({ key: "tasks", label: t("إدارة المهام", "Task Management"), kind: "tasks" });
-  const isVehManager = String(db.vehManager || "").trim().toLowerCase() !== "" && String(db.vehManager).trim().toLowerCase() === String(user.email || "").trim().toLowerCase();
   if (user.role === "Admin" || user.role === "Operations Manager" || isVehManager) items.push({ key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" });
   const myRec = hrRecordFor(db, user);
   if (myRec) items.push({ key: "myhr", label: t("إجازاتي ورواتبي", "My Leave & Pay"), kind: "myhr" });
