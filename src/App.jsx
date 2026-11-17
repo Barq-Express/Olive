@@ -3749,8 +3749,21 @@ function ShiftsWindow({ db, save, company = null }) {
   const list = db.riders.filter((r) => inScope(r)
     && (r.name.includes(q) || (r.phone || "").includes(q) || (r.companyId || "").includes(q))
     && (typeF === "all" || r.type === typeF)
-    && (areaF === "all" || (r.area || "") === areaF));
-  const roster = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc)).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
+    && (areaF === "all" || (r.area || "") === areaF))
+    // الترتيب: اللي يبدأ خلال ساعة فوق فوق، بعدين اللي عليه دوام اليوم، وفي الآخر اللي عليه إجازة
+    .sort((a, b) => {
+      const nowM = vehMin(new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false }));
+      const rank = (r) => {
+        const works = (r.shiftDays || []).includes(tc) && !!r.shiftStart;
+        if (!works) return 2;
+        const diff = vehMin(r.shiftStart) - nowM;
+        return diff > 0 && diff <= 60 ? 0 : 1;
+      };
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return (a.shiftStart || "99:99").localeCompare(b.shiftStart || "99:99");
+    });
+  const roster =db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc)).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
   const openEdit = (r) => setEditing({ ...r, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
   const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
   const saveShift = () => { const riders = db.riders.map((x) => (x.id === editing.id ? editing : x)); save({ ...db, riders }); setEditing(null); };
