@@ -3744,6 +3744,14 @@ function ShiftsWindow({ db, save, company = null }) {
     roster.forEach((r) => { att[r.id + ":" + todayStr()] = true; });
     save({ ...db, attendance: att });
   };
+  // 0 = يبدأ خلال ساعة (فوق)، 1 = عليه دوام اليوم، 2 = عليه إجازة اليوم (تحت)
+  const shiftBand = (r) => {
+    const nowM = vehMin(new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false }));
+    if (!(r.shiftDays || []).includes(tc)) return 2;
+    if (!r.shiftStart) return 1;
+    const diff = vehMin(r.shiftStart) - nowM;
+    return diff > 0 && diff <= 60 ? 0 : 1;
+  };
   const inScope = (r) => (company ? r.company === company : (cf === "all" || r.company === cf));
   const areas = Array.from(new Set(db.riders.filter((r) => (company ? r.company === company : true)).map((r) => r.area).filter(Boolean))).sort();
   const list = db.riders.filter((r) => inScope(r)
@@ -3752,15 +3760,7 @@ function ShiftsWindow({ db, save, company = null }) {
     && (areaF === "all" || (r.area || "") === areaF))
     // الترتيب: اللي يبدأ خلال ساعة فوق فوق، بعدين اللي عليه دوام اليوم، وفي الآخر اللي عليه إجازة
     .sort((a, b) => {
-      const nowM = vehMin(new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false }));
-      const rank = (r) => {
-        const works = (r.shiftDays || []).includes(tc);
-        if (!works) return 2;
-        if (!r.shiftStart) return 1; // عنده دوام اليوم بس وقته غير مكتوب
-        const diff = vehMin(r.shiftStart) - nowM;
-        return diff > 0 && diff <= 60 ? 0 : 1;
-      };
-      const ra = rank(a), rb = rank(b);
+      const ra = shiftBand(a), rb = shiftBand(b);
       if (ra !== rb) return ra - rb;
       return (a.shiftStart || "99:99").localeCompare(b.shiftStart || "99:99");
     });
@@ -3869,8 +3869,16 @@ function ShiftsWindow({ db, save, company = null }) {
             {[tr("المندوب"), tr("الشركة"), tr("النوع"), tr("وقت الشفت"), tr("الأيام"), ""].map((h) => <th key={h} className="py-2 px-3 font-semibold">{h}</th>)}
           </tr></thead>
           <tbody>
-            {list.slice((spage - 1) * SPER, spage * SPER).map((r) => (
-              <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50">
+            {list.slice((spage - 1) * SPER, spage * SPER).map((r, i, arr) => (
+              <React.Fragment key={r.id}>
+              {(i === 0 || shiftBand(arr[i - 1]) !== shiftBand(r)) && (
+                <tr className="bg-slate-100">
+                  <td colSpan={6} className="py-1.5 px-3 text-xs font-bold" style={{ color: shiftBand(r) === 0 ? "#c0341d" : shiftBand(r) === 1 ? BRAND.navy : "#64748b" }}>
+                    {shiftBand(r) === 0 ? t("تبدأ خلال ساعة", "Starts within an hour") : shiftBand(r) === 1 ? t("عليهم دوام اليوم", "Working today") : t("عليهم إجازة اليوم", "Off today")}
+                  </td>
+                </tr>
+              )}
+              <tr className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2 px-3 font-semibold text-slate-800">{r.name}</td>
                 <td className="px-3">{companyPill(r.company)}</td>
                 <td className="px-3 text-slate-600">{r.type === "Freelancer" ? tr("فريلانسر") : tr("ثابت")}</td>
@@ -3878,6 +3886,7 @@ function ShiftsWindow({ db, save, company = null }) {
                 <td className="px-3 text-xs text-slate-500">{(r.shiftDays && r.shiftDays.length) ? r.shiftDays.map((d) => DAY_AR[d]).join(tr("، ")) : "—"}</td>
                 <td className="px-3"><Btn kind="ghost" size="sm" onClick={() => openEdit(r)}><Pencil size={13} /> {tr("شفت")}</Btn></td>
               </tr>
+              </React.Fragment>
             ))}
             {list.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-slate-400">{tr("لا نتائج")}</td></tr>}
           </tbody>
