@@ -3731,6 +3731,7 @@ function ShiftsWindow({ db, save, company = null }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [spage, setSpage] = useState(1); const SPER = 50;
+  const [selIds, setSelIds] = useState([]);
   const tc = todayCode();
   const workedToday = (rid) => db.imports.some((im) => im.date === todayStr() && im.results.some((r) => r.riderId === rid && r.matched));
   const toggleStart = (rid) => {
@@ -3738,6 +3739,14 @@ function ShiftsWindow({ db, save, company = null }) {
     const key = rid + ":" + todayStr(); const att = { ...db.attendance };
     if (att[key]) delete att[key]; else att[key] = true;
     save({ ...db, attendance: att });
+  };
+  const isStarted = (r) => workedToday(r.id) || !!db.attendance[r.id + ":" + todayStr()];
+  const toggleSel = (id) => setSelIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const markSelectedWorking = () => {
+    const att = { ...db.attendance };
+    selIds.forEach((id) => { att[id + ":" + todayStr()] = true; });
+    save({ ...db, attendance: att });
+    setSelIds([]);
   };
   const markAllStarted = () => {
     const att = { ...db.attendance };
@@ -3757,7 +3766,9 @@ function ShiftsWindow({ db, save, company = null }) {
   const list = db.riders.filter((r) => inScope(r)
     && (r.name.includes(q) || (r.phone || "").includes(q) || (r.companyId || "").includes(q))
     && (typeF === "all" || r.type === typeF)
-    && (areaF === "all" || (r.area || "") === areaF))
+    && (areaF === "all" || (r.area || "") === areaF)
+    // تعيين الشفتات: اللي ما عليهم شفت اليوم، وعندهم شفت في أيام ثانية
+    && (r.shiftDays || []).length > 0 && !(r.shiftDays || []).includes(tc))
     // الترتيب: اللي يبدأ خلال ساعة فوق فوق، بعدين اللي عليه دوام اليوم، وفي الآخر اللي عليه إجازة
     .sort((a, b) => {
       const ra = shiftBand(a), rb = shiftBand(b);
@@ -3768,8 +3779,6 @@ function ShiftsWindow({ db, save, company = null }) {
   const todayWorkers = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc));
   // روستر اليوم: اللي دوامهم باقي أكثر من ساعة (اللي يبدأ خلال ساعة يطلع في بطاقة الشفتات القادمة فوق)
   const roster = todayWorkers.filter((r) => shiftBand(r) !== 0).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
-  // إجازات اليوم: اللي عندهم أيام دوام بس اليوم مو منها
-  const offToday = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).length > 0 && !(r.shiftDays || []).includes(tc));
   const openEdit = (r) => setEditing({ ...r, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
   const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
   const saveShift = () => { const riders = db.riders.map((x) => (x.id === editing.id ? editing : x)); save({ ...db, riders }); setEditing(null); };
@@ -3828,18 +3837,42 @@ function ShiftsWindow({ db, save, company = null }) {
       })()}
 
       <Card className="p-5">
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <h3 className="font-bold text-slate-800">{t("يشتغل الآن", "Working now")} ({todayWorkers.filter(isStarted).length}) <span className="text-xs font-semibold text-emerald-600">WORKING</span></h3>
+        </div>
+        {todayWorkers.filter(isStarted).length === 0 ? <p className="text-sm text-slate-400">{t("ما فيه أحد شغال الحين", "No one is working now")}</p> : (
+          <div className="space-y-2">
+            {todayWorkers.filter(isStarted).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || "")).map((r) => (
+              <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50/40">
+                <div className="w-16 text-center"><div className="font-extrabold text-slate-800">{r.shiftStart || "—"}</div><div className="text-[10px] text-slate-400">{r.shiftEnd ? tr("حتى ") + r.shiftEnd : ""}</div></div>
+                <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} {companyPill(r.company)}</div><div className="text-xs text-slate-500" dir="ltr">{r.phone}</div></div>
+                {!workedToday(r.id) && <Btn size="sm" kind="ghost" onClick={() => toggleStart(r.id)}>{t("إلغاء", "Undo")}</Btn>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-5">
         <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><CalendarCheck size={18} color={BRAND.orange} /> {tr("روستر اليوم")} ({tr(DAY_AR[tc])})</h3>
-          {roster.length > 0 && <Btn size="sm" kind="success" onClick={markAllStarted}><CheckCircle2 size={14} /> {t("تحديد الكل: بدأ", "Mark all: Started")}</Btn>}
+          {roster.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              <Btn size="sm" kind="ghost" onClick={() => setSelIds(roster.filter((r) => !isStarted(r)).map((r) => r.id))}>{t("تحديد الكل", "Select all")}</Btn>
+              <Btn size="sm" kind="ghost" onClick={() => setSelIds([])}>{t("إلغاء التحديد", "Clear")}</Btn>
+              <Btn size="sm" kind="success" disabled={selIds.length === 0} onClick={markSelectedWorking}><CheckCircle2 size={14} /> {t("تعيين WORKING للمحددين", "Set selected WORKING")} ({selIds.length})</Btn>
+            </div>
+          )}
         </div>
         <p className="text-xs text-slate-500 mb-4">{tr("المناديب المتوقّع دوامهم اليوم مرتّبين حسب وقت الشفت — تواصل معهم قبل البداية للتأكد من الحضور.")}</p>
         {roster.length === 0 ? <p className="text-sm text-slate-400">{tr("لا توجد شفتات مسجّلة لليوم. عيّن الشفتات من الجدول بالأسفل.")}</p> : (
           <div className="space-y-2">
-            {roster.map((r) => {
-              const fromFile = workedToday(r.id);
-              const started = fromFile || !!db.attendance[r.id + ":" + todayStr()];
+            {roster.filter((r) => !isStarted(r)).map((r) => {
+              const fromFile = false;
+              const started = false;
               return (
                 <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100">
+                  <input type="checkbox" className="w-4 h-4" checked={selIds.includes(r.id)} onChange={() => toggleSel(r.id)} />
                   <div className="w-16 text-center"><div className="font-extrabold text-slate-800">{r.shiftStart || "—"}</div><div className="text-[10px] text-slate-400">{r.shiftEnd ? tr("حتى ") + r.shiftEnd : ""}</div></div>
                   <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} {companyPill(r.company)}</div><div className="text-xs text-slate-500" dir="ltr">{r.phone}</div></div>
                   {started ? (
@@ -3855,20 +3888,6 @@ function ShiftsWindow({ db, save, company = null }) {
             })}
           </div>
         )}
-      </Card>
-
-      <Card className="p-5">
-        <h3 className="font-bold text-slate-800 mb-3">{t("إجازات اليوم", "Off today")} ({offToday.length})</h3>
-        {offToday.length ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            {offToday.map((r) => (
-              <div key={r.id} className="flex items-center justify-between py-2 border-b border-slate-100 text-sm">
-                <span className="font-semibold text-slate-700">{r.name}</span>
-                <span className="text-xs text-slate-500" dir="ltr">{r.phone || "—"} · {r.companyId || ""}</span>
-              </div>
-            ))}
-          </div>
-        ) : <div className="text-xs text-slate-400">{t("ما فيه إجازات اليوم", "No days off today")}</div>}
       </Card>
 
       <Card className="p-5">
