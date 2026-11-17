@@ -3754,8 +3754,9 @@ function ShiftsWindow({ db, save, company = null }) {
     .sort((a, b) => {
       const nowM = vehMin(new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false }));
       const rank = (r) => {
-        const works = (r.shiftDays || []).includes(tc) && !!r.shiftStart;
+        const works = (r.shiftDays || []).includes(tc);
         if (!works) return 2;
+        if (!r.shiftStart) return 1; // عنده دوام اليوم بس وقته غير مكتوب
         const diff = vehMin(r.shiftStart) - nowM;
         return diff > 0 && diff <= 60 ? 0 : 1;
       };
