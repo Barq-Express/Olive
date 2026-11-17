@@ -3671,7 +3671,7 @@ function ShiftBulkUpload({ company, riders, onApply, onClose }) {
   const apply = () => { onApply(valid); onClose(); };
   const downloadTemplate = () => {
     const header = ["الاسم / Name", "الهاتف / Phone", "ID", "من / From", "إلى / To", "أيام الإجازة / Off Days"];
-    const body = riders.filter((r) => r.company === company).map((r) => [r.name, r.phone, r.companyId || "", "16:00", "01:00", "الجمعة"]);
+    const body = riders.filter((r) => r.company === company && r.type === "Full Time").map((r) => [r.name, r.phone, r.companyId || "", "16:00", "01:00", "الجمعة"]);
     const ws = XLSX.utils.aoa_to_sheet([header, ...(body.length ? body : [["أحمد", "9200", "", "16:00", "01:00", "الجمعة، السبت"]])]);
     ws["!cols"] = header.map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "shifts");
