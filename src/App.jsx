@@ -3753,6 +3753,11 @@ function ShiftsWindow({ db, save, company = null }) {
   };
   return (
     <div className="space-y-5">
+      {bulkOpen && company && (
+        <Modal open={bulkOpen} onClose={() => setBulkOpen(false)} title={t("رفع شفتات", "Bulk Shifts")}>
+          <ShiftBulkUpload company={company} riders={db.riders} onApply={applyBulkShifts} onClose={() => setBulkOpen(false)} />
+        </Modal>
+      )}
       {!company && (<div className="flex items-center gap-2 pb-1">
         <span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.navy }}><Clock size={18} color="#fff" /></span>
         <h2 className="font-extrabold text-lg text-slate-800">{tr("الشفتات — كل الشركات")}</h2>
@@ -3796,7 +3801,7 @@ function ShiftsWindow({ db, save, company = null }) {
             {!company && <select className={inputCls + " w-32"} value={cf} onChange={(e) => setCf(e.target.value)}><option value="all">{tr("كل الشركات")}</option>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>}
             <select className={inputCls + " w-28"} value={typeF} onChange={(e) => setTypeF(e.target.value)}><option value="all">{t("كل الأنواع", "All Types")}</option><option value="Freelancer">Freelancer</option><option value="Full Time">Full Time</option></select>
             <select className={inputCls + " w-32"} value={areaF} onChange={(e) => setAreaF(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
-            <Btn kind="dark" onClick={() => setBulkOpen(true)}><Upload size={15} /> {t("رفع شفتات", "Bulk Shifts")}</Btn>
+            <Btn kind="dark" onClick={() => { if (!company) return alert(t("اختار الشركة أول من تبويب الشركة، بعدين ارفع الشفتات", "Choose a company first, then upload shifts")); setBulkOpen(true); }}><Upload size={15} /> {t("رفع شفتات", "Bulk Shifts")}</Btn>
             <div className="relative"><Search size={15} className="absolute right-3 top-2.5 text-slate-400" /><input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-44" placeholder={t("اسم / رقم / ID", "name / phone / ID")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
           </div>
         </div>
