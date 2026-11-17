@@ -5957,9 +5957,15 @@ const INTAKE_DOCS = [
 // العمولة لكل منطقة (ريال عماني) — تظهر للمندوب وفي رسالة الرابط
 const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah: 1.1, Sohar: 1.3, Liwa: 1.3, Saham: 1.3, Nizwa: 1.4 };
 // رقم الموظف المختص لكل منطقة — يظهر في صفحة التسجيل فقط (مو في الرسالة)
+// مجموعات المناطق: رابط واحد للمجموعة، والمندوب يختار المنطقة اللي يبيها داخل الفورم
+const INTAKE_GROUPS = [
+  { label: "صحار / صحم / لوى", zones: ["Sohar", "Saham", "Liwa"] },
+  { label: "مسقط / السيب / بوشر", zones: ["Muscat", "Muscat / Seeb", "Muscat / Bosher"] },
+];
 const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Muscat / Seeb": "+96890102631", "Muscat / Bosher": "+96890102631", "Sohar": "+96898174669", "Liwa": "+96898174669", "Saham": "+96898174669" };
 function IntakeForm({ token, onToggleLang }) {
   const [zone, setZone] = useState("");
+  const [zoneOpts, setZoneOpts] = useState([]);
   const [android, setAndroid] = useState(false);
   const [valid, setValid] = useState(null); // null = جارٍ التحقق
   const [f, setF] = useState({ plate: "", fullName: "", idNumber: "", phone: "", civilExpiry: "", licenseExpiry: "" });
@@ -5971,7 +5977,14 @@ function IntakeForm({ token, onToggleLang }) {
   const [ref, setRef] = useState("");
   useEffect(() => {
     supabase.rpc("get_intake_zone", { p_token: token }).then(({ data, error }) => {
-      if (error || !data || !data.zone) setValid(false); else { setZone(data.zone); setValid(true); }
+      if (error || !data || !data.zone) setValid(false);
+      else {
+        // الرابط ممكن يكون لمجموعة مناطق (مفصولة بـ |): المندوب يختار منها
+        const opts = String(data.zone).split("|").map((z) => z.trim()).filter(Boolean);
+        setZoneOpts(opts);
+        setZone(opts[0] || "");
+        setValid(true);
+      }
     }).catch(() => setValid(false));
   }, [token]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -6058,7 +6071,14 @@ function IntakeForm({ token, onToggleLang }) {
               {locked(t("نوع العقد", "Contract Type"), "Part Time")}
               {locked(t("نوع المركبة", "Vehicle Type"), "Car")}
               {locked(t("الجنسية", "Nationality"), "Omani")}
-              {locked(t("المنطقة", "Zone"), zone)}
+              {zoneOpts.length > 1 ? (
+                <div>
+                  <div className="text-xs font-semibold text-slate-600 mb-1">{t("المنطقة (اختار منطقتك)", "Zone (choose yours)")}</div>
+                  <select className={inputCls} value={zone} onChange={(e) => setZone(e.target.value)}>
+                    {zoneOpts.map((z) => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                </div>
+              ) : locked(t("المنطقة", "Zone"), zone)}
             </div>
 
             <div className="grid md:grid-cols-2 gap-4 mb-5">
@@ -6140,7 +6160,7 @@ function IntakeLinkMaker({ zones }) {
     <Card className="p-4">
       <h3 className="font-bold text-slate-800 text-sm mb-2">{t("رابط تسجيل مندوب (منطقة مقفلة)", "Driver intake link (locked zone)")}</h3>
       <div className="flex gap-2 flex-wrap items-end">
-        <Field label={t("المنطقة", "Zone")}><select className={inputCls} value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{t("— اختر —", "— select —")}</option>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select></Field>
+        <Field label={t("المنطقة", "Zone")}><select className={inputCls} value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{t("— اختر —", "— select —")}</option><optgroup label={t("مجموعات (رابط واحد)", "Groups (one link)")}>{INTAKE_GROUPS.map((g) => <option key={g.label} value={g.zones.join("|")}>{g.label}</option>)}</optgroup><optgroup label={t("منطقة واحدة", "Single zone")}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</optgroup></select></Field>
         <Btn onClick={make}>{t("إنشاء الرابط", "Create link")}</Btn>
       </div>
       {err && <div className="text-xs text-red-600 mt-2">{err}</div>}
