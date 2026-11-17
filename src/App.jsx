@@ -2487,7 +2487,7 @@ function AttendanceTab({ company, db, save }) {
 function ReportsScoped({ db, company }) {
   const [type, setType] = useState("cod");
   const [pFrom, setPFrom] = useState(""); const [pTo, setPTo] = useState(""); const [pType, setPType] = useState("Freelancer"); const [pArea, setPArea] = useState("all");
-  const types = { period: t("مندوبي فترة (حسب التاريخ)", "Riders in Period"), fl5: t("فريلانسر مسقط — 5 ساعات فأكثر (للفترة)", "Muscat freelancers — 5h+ (period)"), cod: tr("تقرير COD"), notworked: tr("لم يعملوا / غير نشطين"), freelancer: tr("مستحقات الفريلانسر"), fulltime: tr("رواتب Full Time"), riders: tr("كل المناديب") };
+  const types = { period: t("مندوبي فترة (حسب التاريخ)", "Riders in Period"), fl5: t("فريلانسر مسقط — يوم فيه 5 ساعات فأكثر (للفترة)", "Muscat freelancers — a day with 5h+ (period)"), cod: tr("تقرير COD"), notworked: tr("لم يعملوا / غير نشطين"), freelancer: tr("مستحقات الفريلانسر"), fulltime: tr("رواتب Full Time"), riders: tr("كل المناديب") };
   const rs = db.riders.filter((r) => (!company || r.company === company) && (pArea === "all" || (r.area || "") === pArea));
   const repAreas = Array.from(new Set(db.riders.filter((r) => !company || r.company === company).map((r) => r.area).filter(Boolean))).sort();
   // حساب طلبات/COD/حقوق مندوب ضمن فترة (حسب تاريخ الشيت)
@@ -2505,13 +2505,16 @@ function ReportsScoped({ db, company }) {
       const inRange = (d) => { const s = String(d || "").slice(0, 10); return (!pFrom || s >= pFrom) && (!pTo || s <= pTo); };
       return db.riders.filter((r) => (!company || r.company === company) && riderTypesIn(r, pFrom, pTo).includes("Freelancer") && /مسقط|muscat/i.test(String(r.area || "")))
         .map((r) => {
+          // ساعات كل يوم (مجموع الشيتات لنفس اليوم)، ونحسب الأيام اللي وصلت 5 ساعات فأكثر
+          const perDay = {};
           let hrs = 0, orders = 0;
-          db.imports.filter((im) => (!company || im.company === company) && inRange(im.date)).forEach((im) => { const rr = im.results.find((x) => x.riderId === r.id); if (rr) { hrs += Number(rr.hours) || 0; orders += Number(rr.orders) || 0; } });
-          return { r, hrs, orders };
+          db.imports.filter((im) => (!company || im.company === company) && inRange(im.date)).forEach((im) => { const rr = im.results.find((x) => x.riderId === r.id); if (rr) { const h = Number(rr.hours) || 0; const d = String(im.date).slice(0, 10); perDay[d] = (perDay[d] || 0) + h; hrs += h; orders += Number(rr.orders) || 0; } });
+          const fiveDays = Object.keys(perDay).filter((d) => perDay[d] >= 5).sort();
+          return { r, hrs, orders, fiveDays };
         })
-        .filter((x) => x.hrs >= 5)
+        .filter((x) => x.fiveDays.length > 0)
         .sort((a, b) => b.hrs - a.hrs)
-        .map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone || "", المنطقة: x.r.area || "", النوع: "Freelancer", الساعات: Math.round(x.hrs * 100) / 100, الطلبات: x.orders, من: pFrom || "", إلى: pTo || "" }));
+        .map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone || "", المنطقة: x.r.area || "", النوع: "Freelancer", "أيام_5_ساعات+": x.fiveDays.length, "أيام_التواريخ": x.fiveDays.join("، "), "مجموع_الساعات": Math.round(x.hrs * 100) / 100, الطلبات: x.orders, من: pFrom || "", إلى: pTo || "" }));
     }
     if (type === "period") return rs.filter((r) => pType === "all" || riderTypesIn(r, pFrom, pTo).includes(pType)).map((r) => { const p = periodStats(r.id); return { r, ...p }; }).filter((x) => x.orders > 0 || x.cod > 0).map((x) => ({ المندوب: x.r.name, ID: x.r.companyId || "", الهاتف: x.r.phone, المنطقة: x.r.area || "—", النوع: riderTypesIn(x.r, pFrom, pTo).join(" / "), الطلبات: x.orders, COD_للفترة: x.cod, الحقوق_للفترة: x.dues }));
     if (type === "cod") return rs.map((r) => { const m = riderMoney(db, r.id); return { المندوب: r.name, الشركة: cLabel(r.company), COD_للتحويل: m.codToTransfer, المحوّل: m.transferred, المتبقي: m.owed }; });
@@ -3211,8 +3214,15 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const [camFor, setCamFor] = useState(null); // الكاميرا المباشرة: {sid, key, label}
   const myShifts = (db.vehShifts || []).filter((s) => s.riderId === riderId).sort((a, b) => (String(b.date) + String(b.start)).localeCompare(String(a.date) + String(a.start))).slice(0, 30);
   const myViols = (db.vehViolations || []).filter((x) => x.riderId === riderId && x.status !== "rejected");
+  // وقت نهاية الشفت حسب الأدمن (توقيت مسقط). الشفت اللي يعبر منتصف الليل تنتهي باليوم اللي بعده
+  const shiftEndAt = (s) => {
+    let d = new Date(`${s.date}T${s.end}:00+04:00`);
+    if (vehMin(s.end) <= vehMin(s.start)) d = new Date(d.getTime() + 86400000);
+    return d;
+  };
   const submitOdo = (s, kind) => {
-    if (kind === "end") return setOdoMsg(t("إنهاء الشفت تسويه الإدارة", "Only the admin can end the shift"));
+    // إنهاء قبل وقت النهاية يحتاج موافقة الإدارة (الأدمن ينهيه من تبويب الشفتات)
+    if (kind === "end" && Date.now() < shiftEndAt(s).getTime()) return setOdoMsg(t("الشفت لسا ما خلص وقته (" + s.end + "). استأذن الإدارة عشان تنهيه", "The shift has not reached its end time (" + s.end + "). Ask the admin to end it"));
     const val = odoIn[s.id];
     if (val === undefined || String(val).trim() === "") return setOdoMsg(t("اكتب قراءة العداد", "Enter the odometer reading"));
     const ph = shots[s.id] || {};
@@ -3230,7 +3240,7 @@ function RiderPortal({ db, riderId, creds, refresh }) {
       .then(({ data, error }) => {
         setOdoBusy("");
         if (error || !data) return setOdoMsg(t("تعذّر الإرسال، حاول مرة أخرى", "Failed, try again"));
-        const errs = { not_found: t("الشفت غير موجود", "Shift not found"), not_yours: t("هذا الشفت ليس لك", "Not your shift"), already_closed: t("الشفت مغلق ولا يقبل تعديل", "Shift is closed"), start_too_low: t("العداد أقل من آخر قراءة للسيارة", "Reading is lower than the last reading"), end_before_start: t("عداد النهاية أقل من البداية", "End reading is lower than start"), no_start: t("سجّل عداد البداية أولاً", "Record the start reading first"), bad_odo: t("قراءة غير صحيحة", "Invalid reading"), too_early: t("ما تقدر تنهي الشفت قبل وقته", "You can't end the shift before its time") };
+        const errs = { not_found: t("الشفت غير موجود", "Shift not found"), not_yours: t("هذا الشفت ليس لك", "Not your shift"), already_closed: t("الشفت مغلق ولا يقبل تعديل", "Shift is closed"), start_too_low: t("العداد أقل من آخر قراءة للسيارة", "Reading is lower than the last reading"), end_before_start: t("عداد النهاية أقل من البداية", "End reading is lower than start"), no_start: t("سجّل عداد البداية أولاً", "Record the start reading first"), bad_odo: t("قراءة غير صحيحة", "Invalid reading"), too_early: t("الشفت لسا ما خلص وقته. استأذن الإدارة", "The shift has not reached its end time. Ask the admin") };
         if (data.error) return setOdoMsg("⚠️ " + (errs[data.error] || data.error));
         setOdoIn((cur) => ({ ...cur, [s.id]: "" }));
         setOdoMsg(t("✅ تم تسجيل العداد", "✅ Saved"));
@@ -3391,9 +3401,11 @@ function RiderPortal({ db, riderId, creds, refresh }) {
                     <div className="text-xs text-slate-500 mb-2" dir="ltr">{s.start} - {s.end}</div>
                     {!closed && (
                       <div className="flex gap-2 items-center flex-wrap">
-                        <span className="text-xs text-slate-600">{started ? t("عداد البداية: " + s.odoStart + " — الشفت جاري، الإدارة تنهيه", "Start: " + s.odoStart + " — running, admin will end it") : t("سجّل عداد البداية", "Enter start odometer")}</span>
-                        {!started && <input type="number" dir="ltr" className={inputCls} style={{ width: 120 }} value={odoIn[s.id] ?? ""} onChange={(e) => setOdoIn({ ...odoIn, [s.id]: e.target.value })} placeholder="km" />}
+                        <span className="text-xs text-slate-600">{started ? t("عداد البداية: " + s.odoStart + " — سجّل النهاية بعد وقت الشفت (" + s.end + ")", "Start: " + s.odoStart + " — enter end after " + s.end) : t("سجّل عداد البداية", "Enter start odometer")}</span>
+                        <input type="number" dir="ltr" className={inputCls} style={{ width: 120 }} value={odoIn[s.id] ?? ""} onChange={(e) => setOdoIn({ ...odoIn, [s.id]: e.target.value })} placeholder="km" />
                         {!started && <Btn size="sm" onClick={() => submitOdo(s, "start")} disabled={odoBusy === s.id}>{t("استلام السيارة وبدء الشفت", "Receive car & start shift")}</Btn>}
+                        {started && <Btn size="sm" onClick={() => submitOdo(s, "end")} disabled={odoBusy === s.id || Date.now() < shiftEndAt(s).getTime()}>{t("إنهاء الشفت", "End shift")}</Btn>}
+                        {started && Date.now() < shiftEndAt(s).getTime() && <span className="text-xs font-semibold" style={{ color: "#b45309" }}>{t("قبل وقت النهاية؟ استأذن الإدارة", "Ending early? Ask the admin")}</span>}
                         {!started && (
                           <div className="w-full grid grid-cols-2 gap-2 mt-1">
                             {SHOT_SLOTS.map(([k, label]) => { const f = (shots[s.id] || {})[k]; return (
