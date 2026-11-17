@@ -3650,6 +3650,9 @@ function ShiftBulkUpload({ company, riders, onApply, onClose }) {
   // الوقت في إكسل يجي كرقم (جزء من اليوم)، نحوّله لـ HH:MM
   const toHM = (v) => {
     if (typeof v === "number" && v >= 0 && v < 2) { const mins = Math.round(v * 1440) % 1440; return String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(mins % 60).padStart(2, "0"); }
+    // نص مثل "4:00:00PM" أو "16:00:00" أو "09:00"
+    const m = String(v || "").trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/);
+    if (m) { let h = +m[1]; const ap = (m[3] || "").toLowerCase(); if (ap === "pm" && h < 12) h += 12; if (ap === "am" && h === 12) h = 0; return String(h).padStart(2, "0") + ":" + m[2]; }
     return String(v || "").trim();
   };
   const AR2CODE = { sunday: "SU", monday: "MO", tuesday: "TU", wednesday: "WE", thursday: "TH", friday: "FR", saturday: "SA", "الاحد": "SU", "الأحد": "SU", "الاثنين": "MO", "الإثنين": "MO", "الثلاثاء": "TU", "الاربعاء": "WE", "الأربعاء": "WE", "الخميس": "TH", "الجمعة": "FR", "السبت": "SA", sun: "SU", mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA" };
@@ -3767,6 +3770,43 @@ function ShiftsWindow({ db, save, company = null }) {
         <span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.navy }}><Clock size={18} color="#fff" /></span>
         <h2 className="font-extrabold text-lg text-slate-800">{tr("الشفتات — كل الشركات")}</h2>
       </div>)}
+
+      {(() => {
+        // الشفتات القادمة اليوم (توقيت مسقط): اللي تبدأ خلال ساعة، واللي تبدأ بعد ساعة
+        const nowHM = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false });
+        const nowM = vehMin(nowHM);
+        const upcoming = roster.map((r) => ({ r, diff: vehMin(r.shiftStart || "") - nowM })).filter((x) => x.r.shiftStart && x.diff > 0);
+        const within = upcoming.filter((x) => x.diff <= 60).sort((a, b) => a.diff - b.diff);
+        const later = upcoming.filter((x) => x.diff > 60).sort((a, b) => a.diff - b.diff);
+        const Row = ({ x }) => (
+          <div className="flex items-center justify-between gap-2 py-2 border-b border-slate-100 text-sm flex-wrap">
+            <div className="min-w-0">
+              <div className="font-semibold text-slate-800">{x.r.name}</div>
+              <div className="text-xs text-slate-500" dir="ltr">{x.r.phone || "—"} · {x.r.companyId || ""} · {cLabel(x.r.company)}</div>
+            </div>
+            <div className="text-end">
+              <div className="font-bold" dir="ltr">{x.r.shiftStart} – {x.r.shiftEnd || "—"}</div>
+              <div className="text-xs text-slate-500">{t("يبدأ بعد " + x.diff + " د", "Starts in " + x.diff + " min")}</div>
+            </div>
+            {x.r.phone && <a href={"tel:" + x.r.phone} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white" style={{ background: BRAND.navy }}>{t("اتصل", "Call")}</a>}
+          </div>
+        );
+        return (
+          <Card className="p-5">
+            <h3 className="font-bold text-slate-800 mb-3">{t("الشفتات القادمة اليوم", "Upcoming shifts today")}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="font-bold text-sm mb-1" style={{ color: "#c0341d" }}>{t("تبدأ خلال ساعة", "Starts within an hour")} ({within.length})</div>
+                {within.length ? within.map((x) => <Row key={x.r.id} x={x} />) : <div className="text-xs text-slate-400 py-2">{t("ما فيه", "None")}</div>}
+              </div>
+              <div>
+                <div className="font-bold text-sm mb-1 text-slate-700">{t("تبدأ بعد ساعة", "Starts after an hour")} ({later.length})</div>
+                {later.length ? later.map((x) => <Row key={x.r.id} x={x} />) : <div className="text-xs text-slate-400 py-2">{t("ما فيه", "None")}</div>}
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       <Card className="p-5">
         <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
