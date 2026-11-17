@@ -3647,7 +3647,12 @@ function ShiftBulkUpload({ company, riders, onApply, onClose }) {
   const [rows, setRows] = useState([]);
   const [headers, setHeaders] = useState(null);
   const [map, setMap] = useState({ key: 0, from: 1, to: 2, off: 3 });
-  const AR2CODE = { "الاحد": "SU", "الأحد": "SU", "الاثنين": "MO", "الإثنين": "MO", "الثلاثاء": "TU", "الاربعاء": "WE", "الأربعاء": "WE", "الخميس": "TH", "الجمعة": "FR", "السبت": "SA", sun: "SU", mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA" };
+  // الوقت في إكسل يجي كرقم (جزء من اليوم)، نحوّله لـ HH:MM
+  const toHM = (v) => {
+    if (typeof v === "number" && v >= 0 && v < 2) { const mins = Math.round(v * 1440) % 1440; return String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(mins % 60).padStart(2, "0"); }
+    return String(v || "").trim();
+  };
+  const AR2CODE = { sunday: "SU", monday: "MO", tuesday: "TU", wednesday: "WE", thursday: "TH", friday: "FR", saturday: "SA", "الاحد": "SU", "الأحد": "SU", "الاثنين": "MO", "الإثنين": "MO", "الثلاثاء": "TU", "الاربعاء": "WE", "الأربعاء": "WE", "الخميس": "TH", "الجمعة": "FR", "السبت": "SA", sun: "SU", mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA" };
   const onFile = (e) => {
     const f = e.target.files[0]; if (!f) return;
     f.arrayBuffer().then((buf) => {
@@ -3665,7 +3670,7 @@ function ShiftBulkUpload({ company, riders, onApply, onClose }) {
     const rider = riders.find((rd) => rd.company === company && (normPhone(rd.phone) === normPhone(keyVal) || rd.name.trim() === String(keyVal).trim() || (rd.companyId && String(rd.companyId).trim() === String(keyVal).trim())));
     const off = parseOff(r[map.off]);
     const shiftDays = DAY_CODES.filter((d) => !off.includes(d));
-    return { rider, name: rider ? rider.name : String(keyVal), from: String(r[map.from] || "").trim(), to: String(r[map.to] || "").trim(), shiftDays, off };
+    return { rider, name: rider ? rider.name : String(keyVal), from: toHM(r[map.from]), to: toHM(r[map.to]), shiftDays, off };
   });
   const valid = preview.filter((p) => p.rider);
   const apply = () => { onApply(valid); onClose(); };
