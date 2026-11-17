@@ -3764,7 +3764,12 @@ function ShiftsWindow({ db, save, company = null }) {
       if (ra !== rb) return ra - rb;
       return (a.shiftStart || "99:99").localeCompare(b.shiftStart || "99:99");
     });
-  const roster =db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc)).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
+  // كل اللي عليهم دوام اليوم
+  const todayWorkers = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc));
+  // روستر اليوم: اللي دوامهم باقي أكثر من ساعة (اللي يبدأ خلال ساعة يطلع في بطاقة الشفتات القادمة فوق)
+  const roster = todayWorkers.filter((r) => shiftBand(r) !== 0).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
+  // إجازات اليوم: اللي عندهم أيام دوام بس اليوم مو منها
+  const offToday = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).length > 0 && !(r.shiftDays || []).includes(tc));
   const openEdit = (r) => setEditing({ ...r, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
   const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
   const saveShift = () => { const riders = db.riders.map((x) => (x.id === editing.id ? editing : x)); save({ ...db, riders }); setEditing(null); };
@@ -3789,7 +3794,7 @@ function ShiftsWindow({ db, save, company = null }) {
         // الشفتات القادمة اليوم (توقيت مسقط): اللي تبدأ خلال ساعة، واللي تبدأ بعد ساعة
         const nowHM = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false });
         const nowM = vehMin(nowHM);
-        const upcoming = roster.map((r) => ({ r, diff: vehMin(r.shiftStart || "") - nowM })).filter((x) => x.r.shiftStart && x.diff > 0);
+        const upcoming = todayWorkers.map((r) => ({ r, diff: vehMin(r.shiftStart || "") - nowM })).filter((x) => x.r.shiftStart && x.diff > 0);
         const within = upcoming.filter((x) => x.diff <= 60).sort((a, b) => a.diff - b.diff);
         const later = upcoming.filter((x) => x.diff > 60).sort((a, b) => a.diff - b.diff);
         const Row = ({ x }) => (
@@ -3850,6 +3855,20 @@ function ShiftsWindow({ db, save, company = null }) {
             })}
           </div>
         )}
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="font-bold text-slate-800 mb-3">{t("إجازات اليوم", "Off today")} ({offToday.length})</h3>
+        {offToday.length ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {offToday.map((r) => (
+              <div key={r.id} className="flex items-center justify-between py-2 border-b border-slate-100 text-sm">
+                <span className="font-semibold text-slate-700">{r.name}</span>
+                <span className="text-xs text-slate-500" dir="ltr">{r.phone || "—"} · {r.companyId || ""}</span>
+              </div>
+            ))}
+          </div>
+        ) : <div className="text-xs text-slate-400">{t("ما فيه إجازات اليوم", "No days off today")}</div>}
       </Card>
 
       <Card className="p-5">
