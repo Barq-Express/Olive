@@ -5964,8 +5964,8 @@ const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah:
 // رقم الموظف المختص لكل منطقة — يظهر في صفحة التسجيل فقط (مو في الرسالة)
 // مجموعات المناطق: رابط واحد للمجموعة، والمندوب يختار المنطقة اللي يبيها داخل الفورم
 const INTAKE_GROUPS = [
-  { label: "صحار / صحم / لوى", zones: ["Sohar", "Saham", "Liwa"] },
-  { label: "مسقط / السيب / بوشر", zones: ["Muscat", "Muscat / Seeb", "Muscat / Bosher"] },
+  { label: "الباطنة (صحم / صحار / لوى)", zones: ["Saham", "Sohar", "Liwa"] },
+  { label: "مسقط (السيب / بوشر)", zones: ["Muscat / Seeb", "Muscat / Bosher"] },
 ];
 const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Muscat / Seeb": "+96890102631", "Muscat / Bosher": "+96890102631", "Sohar": "+96898174669", "Liwa": "+96898174669", "Saham": "+96898174669" };
 const REG_ZONES = ["Muscat", "Muscat / Seeb", "Muscat / Bosher", "Sohar", "Saham", "Liwa", "Salalah", "Nizwa"];
@@ -6294,6 +6294,26 @@ function RegDocs({ r, canEdit = false, onDocChange }) {
     if (error || !data || !data.signedUrl) return alert(t("تعذّر فتح المستند", "Could not open the file"));
     window.open(data.signedUrl, "_blank", "noopener");
   });
+  // تحميل كل الصور: كل صورة تنزل باسمها (البطاقة الشخصية امام ...) للابتوب
+  const DOC_FILE_NAMES = { civilFront: "البطاقة الشخصية امام", civilBack: "البطاقة الشخصية خلف", licenseFront: "الرخصة امام", licenseBack: "الرخصة خلف", mulkiyaFront: "الملكية امام", mulkiyaBack: "الملكية خلف", personal: "الصورة الشخصية" };
+  const downloadAll = async () => {
+    let n = 0;
+    for (const [k] of INTAKE_DOCS) {
+      const path = docs[k];
+      if (!path) continue;
+      const { data, error } = await supabase.storage.from("rider-docs").download(path);
+      if (error || !data) continue;
+      const ext = (path.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url; a.download = DOC_FILE_NAMES[k] + "." + ext;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      n++;
+      await new Promise((res) => setTimeout(res, 700));
+    }
+    if (!n) alert(t("ما فيه صور مرفوعة لهذا المندوب", "No images uploaded for this rider"));
+  };
   return (
     <div className="space-y-3 rounded-xl border border-slate-100 p-3">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
@@ -6301,6 +6321,7 @@ function RegDocs({ r, canEdit = false, onDocChange }) {
         <div><span className="text-slate-400 text-xs">{t("انتهاء البطاقة", "Civil ID expiry")}</span><div dir="ltr">{r.civilExpiry || "—"}</div></div>
         <div><span className="text-slate-400 text-xs">{t("انتهاء الرخصة", "License expiry")}</span><div dir="ltr">{r.licenseExpiry || "—"}</div></div>
       </div>
+      {Object.keys(docs).length > 0 && <div className="flex justify-end"><Btn kind="ghost" size="sm" onClick={downloadAll}><Download size={14} /> {t("تحميل الصور", "Download images")}</Btn></div>}
       {(Object.keys(docs).length > 0 || canEdit) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {INTAKE_DOCS.map(([k, en, ar]) => (
