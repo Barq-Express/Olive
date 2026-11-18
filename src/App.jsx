@@ -5360,10 +5360,15 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
         </div>
       </Modal>
 
-      <Modal open={manageOpen} onClose={() => setManageOpen(false)} title={t("موظفو التوزيع التلقائي", "Auto-assign Staff")}>
+      <Modal open={manageOpen} onClose={() => setManageOpen(false)} title={t("توزيع المناديب حسب المنطقة", "Assign reg. requests by zone")}>
         <div className="space-y-3">
-          <p className="text-xs text-slate-500">{t("توزّع الطلبات بالتساوي على الموظفين المخوّلين (Round Robin). التخويل يتم من نافذة الموظفين → حساب الدخول → مخوّل بمتابعة التسجيل.", "Requests are distributed evenly across authorized agents. Authorize them from Employees → Login Account → Reg agent.")}</p>
-          <div className="space-y-1">{agents.length === 0 ? <p className="text-sm text-slate-400 py-3 text-center">{t("لا يوجد موظفون مخوّلون بعد", "No authorized agents yet")}</p> : agents.map((s) => <div key={s.id} className="flex items-center justify-between border-b border-slate-50 py-2"><span className="font-semibold text-sm">{s.name}</span><span className="text-xs text-slate-400" dir="ltr">{s.id}</span></div>)}</div>
+          <p className="text-xs text-slate-500">{t("اختر الموظفين لكل منطقة. المندوب اللي يسجل من رابط المنطقة يروح للموظف المعيّن لها، وإذا فيه أكثر من موظف يتوزع بالتساوي بينهم. المنطقة بدون موظف = الطلب يبقى بدون موظف عند الإدارة. الموظف لازم يكون مخوّل بمتابعة التسجيل.", "Pick the staff for each zone. A rider who registers via that zone's link goes to the assigned staff; with several staff, requests are split evenly. A zone with no staff leaves the request unassigned for admin. Staff must be authorized for registration follow-up.")}</p>
+          {agents.length === 0 ? <p className="text-sm text-slate-400 py-3 text-center">{t("لا يوجد موظفون مخوّلون بعد", "No authorized agents yet")}</p> : null}
+          <div className="space-y-2">{REG_ZONES.map((z) => { const cur = (db.regZoneStaff || {})[z] || []; return (
+            <div key={z} className="border border-slate-100 rounded-lg p-2">
+              <div className="font-semibold text-sm mb-1" dir="ltr">{z}{cur.length === 0 ? <span className="text-xs text-amber-600 mr-2">{t("بدون موظف", "No staff")}</span> : null}</div>
+              <div className="flex flex-wrap gap-3">{agents.map((s) => <label key={s.id} className="flex items-center gap-1 text-xs cursor-pointer select-none"><input type="checkbox" checked={cur.includes(s.id)} onChange={() => { const m = { ...(db.regZoneStaff || {}) }; const c2 = m[z] || []; m[z] = c2.includes(s.id) ? c2.filter((x) => x !== s.id) : [...c2, s.id]; save({ ...db, regZoneStaff: m }); }} />{s.name}</label>)}</div>
+            </div>); })}</div>
         </div>
       </Modal>
     </div>
@@ -5963,6 +5968,7 @@ const INTAKE_GROUPS = [
   { label: "مسقط / السيب / بوشر", zones: ["Muscat", "Muscat / Seeb", "Muscat / Bosher"] },
 ];
 const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Muscat / Seeb": "+96890102631", "Muscat / Bosher": "+96890102631", "Sohar": "+96898174669", "Liwa": "+96898174669", "Saham": "+96898174669" };
+const REG_ZONES = ["Muscat", "Muscat / Seeb", "Muscat / Bosher", "Sohar", "Saham", "Liwa", "Salalah", "Nizwa"];
 function IntakeForm({ token, onToggleLang }) {
   const [zone, setZone] = useState("");
   const [zoneOpts, setZoneOpts] = useState([]);
@@ -5995,6 +6001,7 @@ function IntakeForm({ token, onToggleLang }) {
     consent_required: t("يجب الموافقة على الإقرار.", "You must accept the declaration."),
     missing_docs: t("ارفع كل المستندات السبعة.", "Upload all seven documents."),
     name_not_english: t("اكتب الاسم بالإنجليزي كما هو في البطاقة المدنية.", "Write your name in English exactly as on your Civil ID."),
+    zone_required: t("اختر منطقتك من القائمة.", "Choose your zone from the list."),
   };
 
   const submit = async () => {
@@ -6018,7 +6025,7 @@ function IntakeForm({ token, onToggleLang }) {
         docs[key] = path;
       }
       setProgress(t("جاري إرسال الطلب...", "Sending request..."));
-      const { data, error } = await supabase.rpc("submit_rider_intake", { p_token: token, p_reg: { ...f, consent: true, docs } });
+      const { data, error } = await supabase.rpc("submit_rider_intake", { p_token: token, p_reg: { ...f, zone: zoneOpts.length > 1 ? zone : "", consent: true, docs } });
       if (error || !data) throw new Error("submit");
       if (data.duplicate) throw new Error(t("هذا الرقم مسجّل مسبقاً لدينا.", "This phone number is already registered."));
       if (data.error) throw new Error(ERR[data.error] || t("تعذّر الإرسال، حاول مرة أخرى.", "Submission failed, try again."));
