@@ -512,6 +512,7 @@ function normalizeDB(db) {
     vehRiderIds: db.vehRiderIds || [],       // المناديب المصرّح لهم يشوفون السيارات والشفتات في بوابتهم
     vehManagers: Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []), // مسؤولو السيارات (حسابات موظفين)
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
+    regZoneStaff: db.regZoneStaff || {},     // توزيع طلبات التسجيل: المنطقة -> موظفوها (حسب الإيميل)
   };
 }
 
@@ -4014,6 +4015,10 @@ function Employees({ db, save, user }) {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, regViewer: !a.regViewer } } });
   };
+  const toggleDocsDl = (a) => {
+    const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
+    save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, docsDownloader: !a.docsDownloader } } });
+  };
   const toggleCodAgent = (a) => {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, codAgentPerm: !a.codAgentPerm } } });
@@ -4107,6 +4112,8 @@ function Employees({ db, save, user }) {
                 {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.role} onChange={(e) => changeRole(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: BRAND.blue }} title={t("تغيير الدور", "Change role")}><option value="Admin">{roleLabel("Admin")}</option><option value="Operations Manager">{roleLabel("Operations Manager")}</option><option value="Finance">{roleLabel("Finance")}</option><option value="Supervisor">{roleLabel("Supervisor")}</option><option value="Registration">{t("متابعة التسجيل فقط (بدون مناديب)", "Registration only (no riders)")}</option></select> : <Pill color={BRAND.blue}>{a.role === "Registration" ? t("متابعة التسجيل فقط", "Registration only") : roleLabel(a.role)}</Pill>}{isAdmin && a.role === "Supervisor" && a.email !== "sulimanalhatmi.9669@gmail.com" ? <select value={a.company || "Snoonu"} onChange={(e) => changeCompany(a, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" style={{ color: CMETA[a.company]?.color || "#64748b" }} title={t("تغيير الشركة", "Change company")}>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select> : (a.company ? companyPill(a.company) : null)}{a.regAgent ? <Pill color="#0f9d58">{t("متابع تسجيل", "Reg agent")}</Pill> : null}
                 {a.disabled ? <Pill color="#c0341d">{t("معطّل", "Disabled")}</Pill> : null}
                 {a.codAgentPerm ? <Pill color={BRAND.blue}>{t("متابع تحويلات", "Transfers agent")}</Pill> : null}
+                {a.docsDownloader ? <Pill color="#7c3aed">{t("تحميل الصور", "Images")}</Pill> : null}
+                {isAdmin && <button onClick={() => toggleDocsDl(a)} className="text-xs font-semibold" style={{ color: a.docsDownloader ? "#c0341d" : "#7c3aed" }} title={t("صلاحية تحميل صور المناديب الجاهزين", "Permission to download ready riders' images")}>{a.docsDownloader ? t("إلغاء تحميل الصور", "Unset images") : t("تحميل الصور", "Images access")}</button>}
                 {isAdmin && <button onClick={() => toggleAgent(a)} className="text-xs font-semibold" style={{ color: a.regAgent ? "#c0341d" : "#0f9d58" }} title={t("تفعيل/إلغاء متابعة التسجيل", "Toggle registration follow-up")}>{a.regAgent ? t("إلغاء متابعة التسجيل", "Unset reg") : t("متابع تسجيل", "Reg agent")}</button>}{isAdmin && <button onClick={() => toggleRegViewer(a)} className="text-xs font-semibold" style={{ color: a.regViewer ? "#c0341d" : "#0f9d58" }} title={t("يشوف تبويب التسجيل كامل (عرض فقط بدون تعديل)", "Sees registration tab (view only)")}>{a.regViewer ? t("إلغاء عرض التسجيل", "Unset view") : t("يشوف التسجيل (عرض فقط)", "Reg view only")}</button>}
                 {isAdmin && <button onClick={() => toggleCodAgent(a)} className="text-xs font-semibold" style={{ color: a.codAgentPerm ? "#c0341d" : BRAND.blue }} title={t("تفعيل/إلغاء متابعة التحويلات", "Toggle transfers follow-up")}>{a.codAgentPerm ? t("إلغاء متابعة التحويلات", "Unset transfers") : t("متابع تحويلات", "Transfers agent")}</button>}
                 {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" && <button onClick={() => toggleDisabled(a)} className="text-xs font-semibold" style={{ color: a.disabled ? "#0f9d58" : "#c0341d" }} title={t("تعطيل/تفعيل الحساب", "Disable/enable account")}>{a.disabled ? t("تفعيل الحساب", "Enable") : t("تعطيل الحساب", "Disable")}</button>}
@@ -5106,6 +5113,24 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
   const upd = (id, patch) => save({ ...db, registrations: regs.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
   const toggleStep = (r, key) => upd(r.id, { steps: { ...(r.steps || {}), [key]: !(r.steps && r.steps[key]) } });
   const reassign = (r, who) => upd(r.id, { assignee: who });
+  // توزيع الطلبات المفتوحة (غير المعتمدة/المرفوضة) حسب منطقة كل طلب: موظفو المنطقة بالتساوي
+  const redistributeByZone = () => {
+    const zs = db.regZoneStaff || {};
+    const activeStaff = (z) => (zs[z] || []).filter((id) => { const p = (db.staff || {})[id]; return p && p.regAgent && !p.disabled; });
+    const open = regs.filter((r) => !r.converted && !r.rejected);
+    const load = {}; const assign = {};
+    open.forEach((r) => {
+      const cand = activeStaff((r.wilaya || "").trim());
+      if (!cand.length) { assign[r.id] = ""; return; } // المنطقة بدون موظف = يبقى للإدارة
+      let best = cand[0];
+      cand.forEach((s) => { if ((load[s] || 0) < (load[best] || 0)) best = s; });
+      load[best] = (load[best] || 0) + 1; assign[r.id] = best;
+    });
+    const changedN = open.filter((r) => (r.assignee || "") !== assign[r.id]).length;
+    if (!changedN) return alert(t("ما فيه طلبات تحتاج تغيير", "Nothing to change"));
+    if (!window.confirm(t("توزيع " + open.length + " طلب مفتوح حسب المنطقة؟ (" + changedN + " طلب بيتغيّر موظفه)", "Distribute " + open.length + " open requests by zone? (" + changedN + " will change assignee)"))) return;
+    save({ ...db, registrations: regs.map((r) => (r.id in assign && (r.assignee || "") !== assign[r.id] ? { ...r, assignee: assign[r.id] } : r)) });
+  };
   // نقل مسجّلين من موظف إلى موظف آخر (جماعي)
   const [showRegMove, setShowRegMove] = useState(false);
   const [rmFrom, setRmFrom] = useState(""); const [rmTo, setRmTo] = useState("");
@@ -5190,7 +5215,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
         <div className="flex items-center gap-2"><span className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: BRAND.orange }}><UserCog size={18} color="#fff" /></span><h2 className="font-extrabold text-lg text-slate-800">{t("تسجيل واعتماد المناديب", "Driver Registration")}</h2></div>
         <div className="flex items-center gap-2 flex-wrap">
           {COMPANIES.map((c) => <a key={c} href={"#/register/" + REG_LINK_FOR[c]} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: CMETA[c].color + "18", color: CMETA[c].color }}>{cLabel(c)} ↗</a>)}
-          {isManager && <Btn kind="ghost" onClick={() => setManageOpen(true)}><UserCog size={15} /> {t("موظفو التوزيع", "Assignees")}</Btn>}
+          {isManager && <Btn kind="ghost" onClick={() => setManageOpen(true)}><UserCog size={15} /> {t("موظفو التوزيع", "Assignees")}</Btn>}{isManager && <Btn kind="ghost" onClick={redistributeByZone}>{t("توزيع المسجلين حسب المنطقة", "Distribute by zone")}</Btn>}
           {isManager && <Btn kind="ghost" onClick={() => setShowRegMove(true)}><Users size={15} /> {t("نقل مسجّلين بين الموظفين", "Move requests")}</Btn>}
         </div>
       </div>
@@ -5864,6 +5889,7 @@ function RegStats({ db }) {
 
 function sidebarFor(user, db) {
   const regItem = { key: "registration", label: t("تسجيل المناديب", "Registration"), kind: "registration" };
+  const dlItem = { key: "docsdl", label: t("تحميل صور المناديب", "Rider images"), kind: "docsdl" };
   const vehItem = { key: "vehicles", label: t("السيارات", "Vehicles"), kind: "vehicles" };
   const vmList = Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []);
   const isVehManager = vmList.some((x) => String(x).trim().toLowerCase() === String(user.email || "").trim().toLowerCase() && String(user.email || "").trim() !== "");
@@ -5878,6 +5904,7 @@ function sidebarFor(user, db) {
     if (user.regAgent) items.push(regItem);
     if (user.regViewer && !user.regAgent) items.push(regItem);
     if (isVehManager) items.push(vehItem);
+    if (user.docsDownloader && !user.regAgent && !user.regViewer) items.push(dlItem);
     return items;
   }
   const items = [{ key: "dashboard", label: t("اللوحة العامة", "Dashboard"), kind: "dashboard" }];
@@ -5901,6 +5928,7 @@ function sidebarFor(user, db) {
     items.push(regItem);
   }
   if (user.regViewer && !user.regAgent) items.push(regItem);
+  if (user.docsDownloader && !user.regAgent && !user.regViewer && user.role !== "Admin" && user.role !== "Operations Manager") items.push(dlItem);
   return items;
 }
 const ICON_FOR = { dashboard: LayoutDashboard, company: Building2, allriders: Users, reports: FileBarChart, shifts: Clock, employees: UserCog, registration: UserPlus, areas: MapPin, banks: Banknote, hr: Users, myhr: CalendarCheck, archive: Trash2, tasks: ClipboardList, mytasks: ClipboardList };
@@ -6277,6 +6305,51 @@ function SnoonuExport({ regs, db, save }) {
   );
 }
 
+// تحميل صور المندوب: كل صورة تنزل للابتوب باسمها (البطاقة الشخصية امام ...)
+const DOC_FILE_NAMES = { civilFront: "البطاقة الشخصية امام", civilBack: "البطاقة الشخصية خلف", licenseFront: "الرخصة امام", licenseBack: "الرخصة خلف", mulkiyaFront: "الملكية امام", mulkiyaBack: "الملكية خلف", personal: "الصورة الشخصية" };
+async function downloadRegImages(docs) {
+  let n = 0;
+  for (const [k] of INTAKE_DOCS) {
+    const path = (docs || {})[k];
+    if (!path) continue;
+    const { data, error } = await supabase.storage.from("rider-docs").download(path);
+    if (error || !data) continue;
+    const ext = (path.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url; a.download = DOC_FILE_NAMES[k] + "." + ext;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    n++;
+    await new Promise((res) => setTimeout(res, 700));
+  }
+  if (!n) alert(t("ما فيه صور مرفوعة لهذا المندوب", "No images uploaded for this rider"));
+  return n;
+}
+
+// صلاحية "تحميل الصور": موظف يشوف بس المسجلين اللي تمت مراجعتهم وتدريبهم
+function DocsDownloadWindow({ db }) {
+  const [q, setQ] = useState("");
+  const list = (db.registrations || []).filter((r) => regStepsDone(r) && !r.rejected && (
+    !q || (String(r.fullName || "") + " " + String(r.phone || "") + " " + String(r.idNumber || "")).toLowerCase().includes(q.toLowerCase())));
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <h3 className="font-bold text-slate-800">{t("تحميل صور المناديب", "Rider images")} <span className="text-xs font-normal text-slate-400">({list.length})</span></h3>
+        <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
+      </div>
+      <p className="text-xs text-slate-500 mb-3">{t("تظهر هنا فقط الطلبات اللي تمت مراجعتها والتدريب عليها.", "Only requests that were reviewed and trained appear here.")}</p>
+      {list.length === 0 ? <p className="text-sm text-slate-400 py-6 text-center">{t("لا يوجد مناديب جاهزين بعد", "No ready riders yet")}</p> : (
+        <div className="divide-y divide-slate-100">{list.map((r) => (
+          <div key={r.id} className="flex items-center justify-between gap-3 py-2 flex-wrap">
+            <div><div className="font-semibold text-sm">{r.fullName || "—"}</div><div className="text-xs text-slate-500" dir="ltr">{r.phone || ""} {r.wilaya ? "· " + r.wilaya : ""}</div></div>
+            <Btn kind="ghost" size="sm" onClick={() => downloadRegImages(r.docs)}><Download size={14} /> {t("تحميل الصور", "Download images")}</Btn>
+          </div>))}</div>
+      )}
+    </Card>
+  );
+}
+
 // ===== الأدمن: بيانات الفورم والمستندات داخل طلب التسجيل =====
 function RegDocs({ r, canEdit = false, onDocChange }) {
   const docs = r.docs || {};
@@ -6294,26 +6367,6 @@ function RegDocs({ r, canEdit = false, onDocChange }) {
     if (error || !data || !data.signedUrl) return alert(t("تعذّر فتح المستند", "Could not open the file"));
     window.open(data.signedUrl, "_blank", "noopener");
   });
-  // تحميل كل الصور: كل صورة تنزل باسمها (البطاقة الشخصية امام ...) للابتوب
-  const DOC_FILE_NAMES = { civilFront: "البطاقة الشخصية امام", civilBack: "البطاقة الشخصية خلف", licenseFront: "الرخصة امام", licenseBack: "الرخصة خلف", mulkiyaFront: "الملكية امام", mulkiyaBack: "الملكية خلف", personal: "الصورة الشخصية" };
-  const downloadAll = async () => {
-    let n = 0;
-    for (const [k] of INTAKE_DOCS) {
-      const path = docs[k];
-      if (!path) continue;
-      const { data, error } = await supabase.storage.from("rider-docs").download(path);
-      if (error || !data) continue;
-      const ext = (path.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const url = URL.createObjectURL(data);
-      const a = document.createElement("a");
-      a.href = url; a.download = DOC_FILE_NAMES[k] + "." + ext;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      n++;
-      await new Promise((res) => setTimeout(res, 700));
-    }
-    if (!n) alert(t("ما فيه صور مرفوعة لهذا المندوب", "No images uploaded for this rider"));
-  };
   return (
     <div className="space-y-3 rounded-xl border border-slate-100 p-3">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
@@ -6321,7 +6374,7 @@ function RegDocs({ r, canEdit = false, onDocChange }) {
         <div><span className="text-slate-400 text-xs">{t("انتهاء البطاقة", "Civil ID expiry")}</span><div dir="ltr">{r.civilExpiry || "—"}</div></div>
         <div><span className="text-slate-400 text-xs">{t("انتهاء الرخصة", "License expiry")}</span><div dir="ltr">{r.licenseExpiry || "—"}</div></div>
       </div>
-      {Object.keys(docs).length > 0 && <div className="flex justify-end"><Btn kind="ghost" size="sm" onClick={downloadAll}><Download size={14} /> {t("تحميل الصور", "Download images")}</Btn></div>}
+      {Object.keys(docs).length > 0 && <div className="flex justify-end"><Btn kind="ghost" size="sm" onClick={() => downloadRegImages(docs)}><Download size={14} /> {t("تحميل الصور", "Download images")}</Btn></div>}
       {(Object.keys(docs).length > 0 || canEdit) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {INTAKE_DOCS.map(([k, en, ar]) => (
@@ -6647,6 +6700,7 @@ export default function App() {
     if (activeItem.kind === "vehicles") return <VehiclesModule db={db} save={save} user={user} />;
     if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} readOnly={!!(user && user.regViewer && !user.regAgent && user.role !== "Admin" && user.role !== "Operations Manager")} />;
     if (activeItem.kind === "areas") return <AreasWindow db={db} save={save} />;
+    if (activeItem.kind === "docsdl") return <DocsDownloadWindow db={db} />;
     if (activeItem.kind === "banks") return <BanksWindow db={db} save={save} />;
     if (activeItem.kind === "archive") return <ArchiveWindow db={db} save={save} onRefresh={refreshDb} />;
     if (activeItem.kind === "reports") return <ReportsScoped db={db} company={null} />;
