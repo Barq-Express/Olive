@@ -4548,7 +4548,7 @@ function VehiclesModule({ db, save, user }) {
     reason = window.prompt(early ? t("الشفت توقف قبل وقت النهاية (" + s.end + "). اكتب السبب:", "Stopped before scheduled end (" + s.end + "). Reason:") : t("اكتب سبب إنهاء الشفت:", "Reason for ending the shift:"), "");
     if (reason === null) return;
     if (!reason.trim()) return alert(t("لازم تكتب السبب", "A reason is required"));
-    const row = { ...s, odoEnd, km: odoEnd - sOdoStart, status: "closed", stoppedAt: nowHM, stoppedEarly: early, stopReason: early ? reason.trim() : "", editedBy: me, editedAt: stamp() };
+    const row = { ...s, odoEnd, km: odoEnd - sOdoStart, status: "closed", stoppedAt: todayStr() + " " + nowHM, stoppedEarly: early, stopReason: reason.trim(), endedBy: "admin", editedBy: me, editedAt: stamp() };
     save({ ...db, vehShifts: withRow(shifts, row) });
   };
   const saveShift = () => {
@@ -4690,7 +4690,7 @@ function VehiclesModule({ db, save, user }) {
                     <td className={td} dir="ltr">{plateOf(s.vehicleId)}</td>
                     <td className={td}><div>{nameOf(s.riderId)}</div><div className="text-xs text-slate-500">{s.riderType || "—"}</div></td>
                     <td className={td}><span className="text-xs font-semibold" style={{ color: stt[2] }}>{LANG === "en" ? stt[1] : stt[0]}</span></td>
-                    <td className={td} dir="ltr">{s.odoStart ?? "—"} → {s.odoEnd ?? "—"}{s.km != null ? <div className="text-xs text-slate-500">{s.km} km</div> : null}{s.stoppedEarly ? <div className="text-xs font-semibold" style={{ color: "#c0341d" }}>{t("أُوقف قبل النهاية", "Stopped early")} ({s.stoppedAt}): {s.stopReason}</div> : null}
+                    <td className={td} dir="ltr">{s.odoStart ?? "—"} → {s.odoEnd ?? "—"}{s.km != null ? <div className="text-xs text-slate-500">{s.km} km</div> : null}{s.status === "closed" && s.stoppedAt ? <div className="text-xs font-semibold" style={{ color: s.stoppedEarly ? "#c0341d" : "#334155" }} dir="ltr">{t("أنهت الإدارة", "Ended by admin")}: {s.stoppedAt}{s.stopReason ? " — " + s.stopReason : ""}</div> : null}{s.status === "closed" && !s.stoppedAt && s.odoAt ? <div className="text-xs text-slate-600" dir="ltr">{t("أنهى المندوب", "Ended by rider")}: {s.odoAt}</div> : null}
                       {s.startPhotos ? <div className="flex flex-wrap gap-1 mt-1">{[["odo", "العداد"], ["front", "أمام"], ["back", "خلف"], ["left", "يسار"], ["right", "يمين"]].map(([k, l]) => s.startPhotos[k] ? <a key={k} href={s.startPhotos[k]} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: BRAND.blue }}>{l}</a> : null)}</div> : null}
                     </td>
                     <td className={td}>{(kmWarn[s.id] || []).map((w, i) => <div key={i} className="text-xs text-red-600">⚠️ {w}</div>)}</td>
