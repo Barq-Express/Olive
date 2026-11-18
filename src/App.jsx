@@ -473,6 +473,46 @@ function classifyTransfer(t, bank) {
 const SEED_RIDERS = [];
 const emptyBank = () => ({ Talabat: [], Snoonu: [], Aramex: [] });
 const emptyDB = () => ({ version: 3, riders: SEED_RIDERS, imports: [], transfers: [], payouts: [], bankRows: emptyBank(), attendance: {}, excuses: {}, employees: [], staff: {}, registrations: [], regStaff: [], areas: [], customBanks: [], hr: { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] } });
+// سجل التغييرات: يحسب تلقائياً من تغيّر وأضيف وحُذف (مع من ومتى) لكل حفظ
+function buildAudit(prev, next, by, at) {
+  const out = [];
+  const label = (x) => (x && (x.name || x.fullName || x.reference || x.plate || x.title || x.model || x.phone || String(x.id || "").slice(0, 8))) || "";
+  const riderName = (id) => { const r = ((prev && prev.riders) || []).find((x) => String(x.id) === String(id)) || ((next && next.riders) || []).find((x) => String(x.id) === String(id)); return r ? r.name : id; };
+  const push = (e) => out.push({ id: uid(), at, by: by || "", ...e });
+  const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})]);
+  keys.forEach((k) => {
+    if (k === "auditLog") return;
+    const pv = prev ? prev[k] : undefined, nv = next ? next[k] : undefined;
+    if (JSON.stringify(pv) === JSON.stringify(nv)) return;
+    if (Array.isArray(nv) && (Array.isArray(pv) || pv === undefined)) {
+      const pm = new Map((pv || []).filter((x) => x && x.id != null).map((x) => [String(x.id), x]));
+      const nm = new Map((nv || []).filter((x) => x && x.id != null).map((x) => [String(x.id), x]));
+      nm.forEach((x, id) => {
+        if (!pm.has(id)) return push({ key: k, action: "add", target: label(x) });
+        const px = pm.get(id);
+        const f = Object.keys(x).filter((q) => JSON.stringify(x[q]) !== JSON.stringify(px[q]));
+        if (f.length) push({ key: k, action: "edit", target: label(x), fields: f.slice(0, 6).join(", ") });
+      });
+      pm.forEach((x, id) => { if (!nm.has(id)) push({ key: k, action: "delete", target: label(x) }); });
+      return;
+    }
+    if (pv && nv && typeof pv === "object" && typeof nv === "object" && !Array.isArray(pv) && !Array.isArray(nv)) {
+      new Set([...Object.keys(pv), ...Object.keys(nv)]).forEach((sk) => {
+        const a = pv[sk], b = nv[sk];
+        if (JSON.stringify(a) === JSON.stringify(b)) return;
+        let target = sk;
+        if (k === "excuses" || k === "attendance") { const [rid, dt] = String(sk).split(":"); target = riderName(rid) + (dt ? " · " + dt : ""); }
+        let fields = "";
+        if (a && b && typeof a === "object" && typeof b === "object") fields = Object.keys(b).filter((q) => JSON.stringify(a[q]) !== JSON.stringify(b[q])).slice(0, 6).join(", ");
+        push({ key: k, action: b === undefined ? "delete" : (a === undefined ? "add" : "edit"), target, fields });
+      });
+      return;
+    }
+    push({ key: k, action: "edit", target: k });
+  });
+  return out.slice(0, 200);
+}
+
 function normalizeDB(db) {
   if (!db) return emptyDB();
   const b = db.bankRows && !Array.isArray(db.bankRows) ? db.bankRows : emptyBank();
@@ -513,6 +553,7 @@ function normalizeDB(db) {
     vehManagers: Array.isArray(db.vehManagers) ? db.vehManagers : (db.vehManager ? [db.vehManager] : []), // مسؤولو السيارات (حسابات موظفين)
     hr: db.hr || { leaveTypes: HR_LEAVE_DEFAULTS, employees: [], leaveRequests: [], payrollRuns: [] },
     regZoneStaff: db.regZoneStaff || {},     // توزيع طلبات التسجيل: المنطقة -> موظفوها (حسب الإيميل)
+    auditLog: Array.isArray(db.auditLog) ? db.auditLog : [], // سجل التغييرات (من/متى/ماذا)
   };
 }
 
@@ -740,7 +781,7 @@ function riderMoneyRange(db, riderId, from, to) {
 /* ============================================================
    Excel importer (per company)
    ============================================================ */
-function ExcelImporter({ company, riders, onApply, onAddRider, onActivate }) {
+function ExcelImporter({ company, riders, onApply, onAddRider, onAddRiders, onActivate }) {
   const [sheetDate, setSheetDate] = useState(todayStr());
   const [headers, setHeaders] = useState(null);
   const [rows, setRows] = useState([]);
@@ -842,6 +883,21 @@ function ExcelImporter({ company, riders, onApply, onAddRider, onActivate }) {
                 </div>
               </div>
             ) : null;
+          })()}
+          {(() => {
+            // تسجيل دفعة واحدة: كل المناديب اللي في الشيت وما هم مسجّلين عندك
+            const toAdd = []; const seenK = new Set();
+            rows.forEach((r) => {
+              if (matchRider(r)) return;
+              const keyVal = String(r[map.key] || "").trim(); const idVal = String(r[map.id] || "").trim();
+              if (!keyVal && !idVal) return;
+              const isPhone = /^[0-9+\-\s]{6,}$/.test(keyVal);
+              const phone = isPhone ? keyVal.replace(/\D/g, "") : "";
+              const k = idVal || phone || keyVal;
+              if (seenK.has(k)) return; seenK.add(k);
+              toAdd.push({ name: isPhone ? (idVal || keyVal) : keyVal, phone, companyId: idVal, company, type: "Freelancer", status: "Active", area: "", commission: "", bank: "", bankName: "", swift: "", joinDate: todayStr(), password: "1234", username: phone || keyVal });
+            });
+            return (onAddRiders && toAdd.length > 0) ? <div className="mb-3"><button onClick={() => onAddRiders(toAdd)} className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: "#0f9d5822", color: "#0f9d58" }}>+ {t("تسجيل كل المناديب غير المسجّلين في الشيت (" + toAdd.length + ")", "Register all unregistered riders in the sheet (" + toAdd.length + ")")}</button></div> : null;
           })()}
           <p className="text-xs text-slate-500 mb-3">{tr("طابق الأعمدة")} ({rows.length} {tr("صف")}):</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1269,7 +1325,7 @@ function Riders({ db, save, company, user }) {
                 <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50">
                   <td className="py-3 px-3 font-semibold text-slate-800" style={red ? { color: "#c0341d" } : {}}>{r.name}{red && " 🔴"}</td>
                   <td className="px-3 text-slate-500" dir="ltr">{r.companyId || "—"}</td>
-                  <td className="px-3 text-slate-600" dir="ltr">{r.phone}</td>
+                  <td className="px-3 text-slate-600" dir="ltr">{PERM_NOW.phone === false ? "—" : r.phone}</td>
                   <td className="px-3 text-slate-500" dir="ltr">{r.civil || "—"}</td>
                   <td className="px-3 text-slate-600">{r.area ? <span className="inline-flex items-center gap-1"><MapPin size={12} className="text-slate-400" />{r.area}</span> : "—"}</td>
                   <td className="px-3">{companyPill(r.company)}</td>
@@ -1442,7 +1498,7 @@ function OrdersTab({ company, db, save, user }) {
   const deleteImport = (id) => { if (window.confirm(t("حذف هذا الشيت نهائياً؟", "Delete this sheet permanently?"))) save({ ...db, imports: db.imports.filter((im) => im.id !== id) }); };
   return (
     <div className="space-y-5">
-      <ExcelImporter company={company} riders={db.riders} onActivate={(rid) => save({ ...db, riders: db.riders.map((r) => (r.id === rid ? { ...r, status: "Active" } : r)) })} onApply={onApply} onAddRider={(nr) => { const p = String(nr.phone || "").replace(/\D/g, ""); const c = String(nr.companyId || "").trim(); const exists = db.riders.some((x) => (p && String(x.phone).replace(/\D/g, "") === p) || (c && (x.companyId || "") === c)); if (exists) { alert(t("هذا المندوب مسجّل بالفعل", "This rider already exists")); return; } const pick = makeAgentPicker(db, company); save({ ...db, riders: [...db.riders, { ...nr, id: uid(), lastWorked: null, codAgent: nr.codAgent || pick() }] }); }} />
+      <ExcelImporter company={company} riders={db.riders} onActivate={(rid) => save({ ...db, riders: db.riders.map((r) => (r.id === rid ? { ...r, status: "Active" } : r)) })} onApply={onApply} onAddRiders={(list) => { const seen = new Set(); const add = []; const hasP = (p) => p && db.riders.some((x) => String(x.phone || "").replace(/\D/g, "") === p); const hasC = (c) => c && db.riders.some((x) => (x.companyId || "") === c); list.forEach((nr) => { const p = String(nr.phone || "").replace(/\D/g, ""); const c = String(nr.companyId || "").trim(); if (hasP(p) || hasC(c) || seen.has(p + "|" + c)) return; seen.add(p + "|" + c); add.push(nr); }); if (!add.length) return alert(t("كل المناديب مسجلين بالفعل", "All riders already exist")); const pick = makeAgentPicker(db, company); save({ ...db, riders: [...db.riders, ...add.map((nr) => ({ ...nr, id: uid(), lastWorked: null, codAgent: nr.codAgent || pick() }))] }); alert(t("تم تسجيل " + add.length + " مندوب", "Registered " + add.length + " riders")); }} onAddRider={(nr) => { const p = String(nr.phone || "").replace(/\D/g, ""); const c = String(nr.companyId || "").trim(); const exists = db.riders.some((x) => (p && String(x.phone).replace(/\D/g, "") === p) || (c && (x.companyId || "") === c)); if (exists) { alert(t("هذا المندوب مسجّل بالفعل", "This rider already exists")); return; } const pick = makeAgentPicker(db, company); save({ ...db, riders: [...db.riders, { ...nr, id: uid(), lastWorked: null, codAgent: nr.codAgent || pick() }] }); }} />
 
       <Card className="p-5">
         <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileBarChart size={18} /> {t("سجل الطلبات والمبالغ", "Orders & Amounts History")}</h3>
@@ -2454,8 +2510,8 @@ function AttendanceTab({ company, db, save }) {
                 </td>
                 <td className="px-3">
                   {r.present ? <span className="text-slate-300">—</span> : (() => { const ex = excuseOf(r.id); return ex
-                    ? <span className="inline-flex items-center gap-2"><Pill color="#d97706">{excuseLabel(ex.type)}</Pill><button onClick={() => openExcuse(r)} className="text-xs text-slate-400">{t("تعديل", "edit")}</button><button onClick={() => removeExcuse(r.id)} className="text-xs text-red-500">✕</button></span>
-                    : <button onClick={() => openExcuse(r)} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: "#eef2ff", color: BRAND.blue }}>+ {t("إضافة عذر", "Add excuse")}</button>; })()}
+                    ? <span className="inline-flex items-center gap-2"><Pill color="#d97706">{excuseLabel(ex.type)}</Pill>{PERM_NOW.excuse === false ? null : <><button onClick={() => openExcuse(r)} className="text-xs text-slate-400">{t("تعديل", "edit")}</button><button onClick={() => removeExcuse(r.id)} className="text-xs text-red-500">✕</button></>}</span>
+                    : (PERM_NOW.excuse === false ? <span className="text-xs text-slate-300">—</span> : <button onClick={() => openExcuse(r)} className="text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: "#eef2ff", color: BRAND.blue }}>+ {t("إضافة عذر", "Add excuse")}</button>); })()}
                 </td>
               </tr>
             ))}
@@ -3811,13 +3867,13 @@ function ShiftsWindow({ db, save, company = null }) {
           <div className="flex items-center justify-between gap-2 py-2 border-b border-slate-100 text-sm flex-wrap">
             <div className="min-w-0">
               <div className="font-semibold text-slate-800">{x.r.name}</div>
-              <div className="text-xs text-slate-500" dir="ltr">{x.r.phone || "—"} · {x.r.companyId || ""} · {cLabel(x.r.company)}</div>
+              <div className="text-xs text-slate-500" dir="ltr">{PERM_NOW.phone === false ? "" : (x.r.phone || "—")} · {x.r.companyId || ""} · {cLabel(x.r.company)}</div>
             </div>
             <div className="text-end">
               <div className="font-bold" dir="ltr">{x.r.shiftStart} – {x.r.shiftEnd || "—"}</div>
               <div className="text-xs text-slate-500">{t("يبدأ بعد " + x.diff + " د", "Starts in " + x.diff + " min")}</div>
             </div>
-            {x.r.phone && <a href={"tel:" + x.r.phone} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white" style={{ background: BRAND.navy }}>{t("اتصل", "Call")}</a>}
+            {x.r.phone && PERM_NOW.phone !== false && <a href={"tel:" + x.r.phone} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white" style={{ background: BRAND.navy }}>{t("اتصل", "Call")}</a>}
           </div>
         );
         return (
@@ -3875,12 +3931,12 @@ function ShiftsWindow({ db, save, company = null }) {
                 <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100">
                   <input type="checkbox" className="w-4 h-4" checked={selIds.includes(r.id)} onChange={() => toggleSel(r.id)} />
                   <div className="w-16 text-center"><div className="font-extrabold text-slate-800">{r.shiftStart || "—"}</div><div className="text-[10px] text-slate-400">{r.shiftEnd ? tr("حتى ") + r.shiftEnd : ""}</div></div>
-                  <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} {companyPill(r.company)}</div><div className="text-xs text-slate-500" dir="ltr">{r.phone}</div></div>
+                  <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} {companyPill(r.company)}</div><div className="text-xs text-slate-500" dir="ltr">{PERM_NOW.phone === false ? "" : r.phone}</div></div>
                   {started ? (
                     <button onClick={() => toggleStart(r.id)} disabled={fromFile} title={fromFile ? t("مؤكّد من شيت الطلبات", "confirmed by orders sheet") : t("اضغط للتراجع", "click to undo")} className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#0f9d5822", color: "#0f9d58", cursor: fromFile ? "default" : "pointer" }}><CheckCircle2 size={13} /> {tr("بدأ الشفت ✓")}</button>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#fff1ee", color: "#c0341d" }}><Phone size={13} /> {tr("لم يبدأ — اتصل")}</a>
+                      {PERM_NOW.phone === false ? null : <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#fff1ee", color: "#c0341d" }}><Phone size={13} /> {tr("لم يبدأ — اتصل")}</a>}
                       <Btn size="sm" onClick={() => toggleStart(r.id)}>{t("تحديد بدأ", "Mark Started")}</Btn>
                     </div>
                   )}
@@ -4019,6 +4075,12 @@ function Employees({ db, save, user }) {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, docsDownloader: !a.docsDownloader } } });
   };
+  // صلاحيات دقيقة لكل موظف: يشوف الأرقام/الاتصال؟ يضيف أعذار؟ (الافتراضي مسموح)
+  const permOf = (a) => ({ phone: !(a.perms && a.perms.phone === false), excuse: !(a.perms && a.perms.excuse === false) });
+  const savePerms = (a, p) => {
+    const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
+    save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, perms: { phone: p.phone, excuse: p.excuse } } } });
+  };
   const toggleCodAgent = (a) => {
     const cur = (db.staff || {})[a.email] || { role: a.role, name: a.name, company: a.company };
     save({ ...db, staff: { ...(db.staff || {}), [a.email]: { ...cur, codAgentPerm: !a.codAgentPerm } } });
@@ -4114,6 +4176,7 @@ function Employees({ db, save, user }) {
                 {a.codAgentPerm ? <Pill color={BRAND.blue}>{t("متابع تحويلات", "Transfers agent")}</Pill> : null}
                 {a.docsDownloader ? <Pill color="#7c3aed">{t("تحميل الصور", "Images")}</Pill> : null}
                 {isAdmin && <button onClick={() => toggleDocsDl(a)} className="text-xs font-semibold" style={{ color: a.docsDownloader ? "#c0341d" : "#7c3aed" }} title={t("صلاحية تحميل صور المناديب الجاهزين", "Permission to download ready riders' images")}>{a.docsDownloader ? t("إلغاء تحميل الصور", "Unset images") : t("تحميل الصور", "Images access")}</button>}
+                {isAdmin && <span className="inline-flex items-center gap-2 text-[11px] text-slate-600 ps-2 border-s border-slate-200"><label className="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={permOf(a).phone} onChange={() => savePerms(a, { ...permOf(a), phone: !permOf(a).phone })} />{t("يشوف الأرقام والاتصال", "Sees phones")}</label><label className="inline-flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={permOf(a).excuse} onChange={() => savePerms(a, { ...permOf(a), excuse: !permOf(a).excuse })} />{t("يضيف أعذار", "Adds excuses")}</label></span>}
                 {isAdmin && <button onClick={() => toggleAgent(a)} className="text-xs font-semibold" style={{ color: a.regAgent ? "#c0341d" : "#0f9d58" }} title={t("تفعيل/إلغاء متابعة التسجيل", "Toggle registration follow-up")}>{a.regAgent ? t("إلغاء متابعة التسجيل", "Unset reg") : t("متابع تسجيل", "Reg agent")}</button>}{isAdmin && <button onClick={() => toggleRegViewer(a)} className="text-xs font-semibold" style={{ color: a.regViewer ? "#c0341d" : "#0f9d58" }} title={t("يشوف تبويب التسجيل كامل (عرض فقط بدون تعديل)", "Sees registration tab (view only)")}>{a.regViewer ? t("إلغاء عرض التسجيل", "Unset view") : t("يشوف التسجيل (عرض فقط)", "Reg view only")}</button>}
                 {isAdmin && <button onClick={() => toggleCodAgent(a)} className="text-xs font-semibold" style={{ color: a.codAgentPerm ? "#c0341d" : BRAND.blue }} title={t("تفعيل/إلغاء متابعة التحويلات", "Toggle transfers follow-up")}>{a.codAgentPerm ? t("إلغاء متابعة التحويلات", "Unset transfers") : t("متابع تحويلات", "Transfers agent")}</button>}
                 {isAdmin && a.email !== "sulimanalhatmi.9669@gmail.com" && <button onClick={() => toggleDisabled(a)} className="text-xs font-semibold" style={{ color: a.disabled ? "#0f9d58" : "#c0341d" }} title={t("تعطيل/تفعيل الحساب", "Disable/enable account")}>{a.disabled ? t("تفعيل الحساب", "Enable") : t("تعطيل الحساب", "Disable")}</button>}
@@ -5918,6 +5981,7 @@ function sidebarFor(user, db) {
     items.push({ key: "shifts", label: t("الشفتات (كل الشركات)", "Shifts (All)"), kind: "shifts" });
     items.push({ key: "employees", label: t("الموظفون", "Employees"), kind: "employees" });
     if (user.role === "Admin") items.push({ key: "hr", label: t("الموارد البشرية", "HR"), kind: "hr" });
+    if (user.role === "Admin") items.push({ key: "audit", label: t("سجل التغييرات", "Audit log"), kind: "audit" });
     items.push(regItem);
     items.push({ key: "areas", label: t("المناطق", "Areas"), kind: "areas" });
     items.push({ key: "banks", label: t("البنوك", "Banks"), kind: "banks" });
@@ -5997,6 +6061,7 @@ const INTAKE_GROUPS = [
 ];
 const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Muscat / Seeb": "+96890102631", "Muscat / Bosher": "+96890102631", "Sohar": "+96898174669", "Liwa": "+96898174669", "Saham": "+96898174669" };
 const REG_ZONES = ["Muscat", "Muscat / Seeb", "Muscat / Bosher", "Sohar", "Saham", "Liwa", "Salalah", "Nizwa"];
+let PERM_NOW = {}; // صلاحيات المستخدم الحالي (تُحدَّث عند كل عرض)
 function IntakeForm({ token, onToggleLang }) {
   const [zone, setZone] = useState("");
   const [zoneOpts, setZoneOpts] = useState([]);
@@ -6327,6 +6392,42 @@ async function downloadRegImages(docs) {
   return n;
 }
 
+// سجل التغييرات (للأدمن): من عمل ماذا ومتى (بتوقيت عُمان)
+function AuditWindow({ db }) {
+  const [q, setQ] = useState("");
+  const [act, setAct] = useState("all");
+  const staffName = (em) => (((db.staff || {})[em] || {}).name) || em || "—";
+  const ACT = { add: t("إضافة", "Added"), edit: t("تعديل", "Edited"), delete: t("حذف", "Deleted") };
+  const KEYL = { riders: t("المناديب", "Riders"), excuses: t("الأعذار", "Excuses"), attendance: t("الحضور", "Attendance"), transfers: t("التحويلات", "Transfers"), staff: t("الموظفون والصلاحيات", "Staff & perms"), registrations: t("طلبات التسجيل", "Registrations"), vehShifts: t("شفتات السيارات", "Vehicle shifts"), codDeductions: t("الخصومات", "Deductions"), codAdjustments: t("تعديلات COD", "COD adjustments"), payouts: t("الدفعات", "Payouts"), areas: t("المناطق", "Areas"), vehicles: t("السيارات", "Vehicles") };
+  const fmt = (iso) => { try { return new Date(iso).toLocaleString("en-GB", { timeZone: "Asia/Muscat", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }); } catch (e) { return iso; } };
+  const list = (db.auditLog || []).slice().reverse().filter((e) => (act === "all" || e.action === act) && (!q || [e.target, e.key, staffName(e.by), e.fields].join(" ").toLowerCase().includes(q.toLowerCase()))).slice(0, 300);
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <h3 className="font-bold text-slate-800">{t("سجل التغييرات", "Audit log")} <span className="text-xs font-normal text-slate-400">({list.length})</span></h3>
+        <div className="flex gap-2 flex-wrap">
+          <input className={inputCls + " w-56"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / موظف / نوع", "Search: name / staff / type")} />
+          <select className={inputCls + " w-32"} value={act} onChange={(e) => setAct(e.target.value)}><option value="all">{t("كل العمليات", "All actions")}</option><option value="add">{ACT.add}</option><option value="edit">{ACT.edit}</option><option value="delete">{ACT.delete}</option></select>
+        </div>
+      </div>
+      {list.length === 0 ? <p className="text-sm text-slate-400 py-6 text-center">{t("لا توجد تغييرات مسجلة بعد", "No changes logged yet")}</p> : (
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("الوقت (عُمان)", "Time (Oman)"), t("من", "By"), t("العملية", "Action"), t("النوع", "Type"), t("الهدف", "Target"), t("التفاصيل", "Details")].map((h) => <th key={h} className="py-2 px-3 font-semibold text-start">{h}</th>)}</tr></thead>
+          <tbody>{list.map((e) => (
+            <tr key={e.id} className="border-b border-slate-100">
+              <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">{fmt(e.at)}</td>
+              <td className="px-3 text-xs">{staffName(e.by)}</td>
+              <td className="px-3 text-xs font-semibold" style={{ color: e.action === "delete" ? "#c0341d" : e.action === "add" ? "#0f9d58" : "#334155" }}>{ACT[e.action] || e.action}</td>
+              <td className="px-3 text-xs text-slate-600">{KEYL[e.key] || e.key}</td>
+              <td className="px-3 text-xs" dir="ltr">{String(e.target || "")}</td>
+              <td className="px-3 text-[11px] text-slate-400" dir="ltr">{e.fields || ""}</td>
+            </tr>))}</tbody>
+        </table></div>
+      )}
+    </Card>
+  );
+}
+
 // صلاحية "تحميل الصور": موظف يشوف بس المسجلين اللي تمت مراجعتهم وتدريبهم
 function DocsDownloadWindow({ db }) {
   const [q, setQ] = useState("");
@@ -6567,10 +6668,12 @@ export default function App() {
     console.error("patch failed", k, lastErr);
     return false;
   };
-  const save = (next) => {
+  const save = (next0) => {
     const at = new Date().toISOString();
     lastAtRef.current = new Date(at).getTime();
     const prev = dbRef.current || {};
+    const auditNew = buildAudit(prev, next0, staff && staff.email, at);
+    const next = auditNew.length ? { ...next0, auditLog: [...(prev.auditLog || []), ...auditNew].slice(-3000) } : next0;
     dbRef.current = next;
     setDb(next);
     const changed = [];
@@ -6671,6 +6774,8 @@ export default function App() {
   if (!staff || !db) return <div className="min-h-screen flex items-center justify-center text-slate-400">{tr("جارٍ التحميل…")}</div>;
 
   const user = staff;
+  // صلاحيات الموظف الحالي (الافتراضي = مسموح، والأدمن يسحبها من قائمة الموظفين)
+  PERM_NOW = (db && db.staff && staff && db.staff[staff.email] && db.staff[staff.email].perms) || {};
   const nav = sidebarFor(user, db);
   const keys = nav.map((n) => n.key);
   const current = keys.includes(route) ? route : keys[0];
@@ -6701,6 +6806,7 @@ export default function App() {
     if (activeItem.kind === "registration") return <RegistrationModule db={db} save={save} user={user} onRefresh={refreshDb} readOnly={!!(user && user.regViewer && !user.regAgent && user.role !== "Admin" && user.role !== "Operations Manager")} />;
     if (activeItem.kind === "areas") return <AreasWindow db={db} save={save} />;
     if (activeItem.kind === "docsdl") return <DocsDownloadWindow db={db} />;
+    if (activeItem.kind === "audit") return <AuditWindow db={db} />;
     if (activeItem.kind === "banks") return <BanksWindow db={db} save={save} />;
     if (activeItem.kind === "archive") return <ArchiveWindow db={db} save={save} onRefresh={refreshDb} />;
     if (activeItem.kind === "reports") return <ReportsScoped db={db} company={null} />;
