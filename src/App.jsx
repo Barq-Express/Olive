@@ -2629,9 +2629,44 @@ const CTABS = [
   { key: "recon", ar: tr("المطابقة البنكية"), en: "Bank Reconciliation", icon: ShieldCheck },
   { key: "attendance", ar: tr("الحضور والنشاط"), en: "Attendance", icon: CalendarCheck },
   { key: "monthly", ar: t("الملخص الشهري", "Monthly Summary"), en: "Monthly Summary", icon: FileBarChart },
+  { key: "ftsched", ar: t("جدول الفول تايم", "Full Time Schedule"), en: "Full Time Schedule", icon: CalendarCheck },
   { key: "shifts", ar: tr("الشفتات"), en: "Shifts", icon: Clock },
   { key: "reports", ar: tr("التقارير"), en: "Reports", icon: FileBarChart },
 ];
+
+// جدول المناديب الفول تايم: أيام الدوام، وقت الشفت، وأيام الإجازة
+function FTScheduleTab({ db, company }) {
+  const [q, setQ] = useState("");
+  const list = db.riders
+    .filter((r) => r.type === "Full Time" && (!company || r.company === company)
+      && (!q || (r.name + " " + (r.phone || "") + " " + (r.companyId || "")).toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <h3 className="font-bold text-slate-800">{t("جدول المناديب الفول تايم", "Full Time schedule")} <span className="text-xs font-normal text-slate-400">({list.length})</span></h3>
+        <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
+      </div>
+      <div className="overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المندوب", "Rider"), "ID", t("المنطقة", "Area"), t("أيام الدوام", "Work days"), t("وقت الشفت", "Shift time"), t("أيام الإجازة", "Off days")].map((h) => <th key={h} className="py-2 px-3 font-semibold text-start">{h}</th>)}</tr></thead>
+        <tbody>{list.map((r) => {
+          const on = DAY_CODES.filter((d) => (r.shiftDays || []).includes(d));
+          const off = on.length ? DAY_CODES.filter((d) => !on.includes(d)) : [];
+          return (
+            <tr key={r.id} className="border-b border-slate-100">
+              <td className="py-2 px-3 font-semibold">{r.name}</td>
+              <td className="px-3 text-slate-500">{r.companyId || "—"}</td>
+              <td className="px-3 text-slate-600">{r.area || "—"}</td>
+              <td className="px-3 text-xs">{on.length ? on.map((d) => DAY_AR[d]).join(tr("، ")) : <span className="text-slate-300">{t("بدون شفتات", "No shifts")}</span>}</td>
+              <td className="px-3 font-bold" dir="ltr">{r.shiftStart ? r.shiftStart + " – " + (r.shiftEnd || "—") : "—"}</td>
+              <td className="px-3 text-xs text-slate-500">{off.length ? off.map((d) => DAY_AR[d]).join(tr("، ")) : "—"}</td>
+            </tr>);
+        })}</tbody>
+      </table></div>
+      {list.length === 0 && <p className="text-sm text-slate-400 py-6 text-center">{t("لا يوجد مناديب فول تايم", "No Full Time riders")}</p>}
+    </Card>
+  );
+}
 
 function OperationsTab({ company, db }) {
   const rIdx = {}; db.riders.forEach((r) => { rIdx[r.id] = r; });
@@ -3159,6 +3194,7 @@ function CompanyWindow({ company, db, save, user, onRefresh }) {
         {tab === "attendance" && <AttendanceTab company={company} db={db} save={save} />}
         {tab === "monthly" && <MonthlyTab company={company} db={db} />}
         {tab === "shifts" && <ShiftsWindow db={db} save={save} company={company} />}
+        {tab === "ftsched" && <FTScheduleTab db={db} company={company} />}
         {tab === "reports" && <ReportsScoped db={db} company={company} />}
       </div>
     </div>
@@ -3804,6 +3840,8 @@ function ShiftsWindow({ db, save, company = null }) {
     save({ ...db, attendance: att });
   };
   const isStarted = (r) => workedToday(r.id) || !!db.attendance[r.id + ":" + todayStr()];
+  const [upQ, setUpQ] = useState(""); const [rosQ, setRosQ] = useState("");
+  const qMatch = (s, r) => (r.name + " " + (r.phone || "") + " " + (r.companyId || "")).toLowerCase().includes(String(s).toLowerCase());
   const toggleSel = (id) => setSelIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const markSelectedWorking = () => {
     const att = { ...db.attendance };
@@ -3842,7 +3880,7 @@ function ShiftsWindow({ db, save, company = null }) {
   // كل اللي عليهم دوام اليوم
   const todayWorkers = db.riders.filter((r) => r.status === "Active" && (company ? r.company === company : true) && (r.shiftDays || []).includes(tc));
   // روستر اليوم: اللي دوامهم باقي أكثر من ساعة (اللي يبدأ خلال ساعة يطلع في بطاقة الشفتات القادمة فوق)
-  const roster = todayWorkers.filter((r) => shiftBand(r) !== 0).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
+  const roster = todayWorkers.filter((r) => shiftBand(r) !== 0 && (!rosQ || qMatch(rosQ, r))).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
   const openEdit = (r) => setEditing({ ...r, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
   const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
   const saveShift = () => { const riders = db.riders.map((x) => (x.id === editing.id ? editing : x)); save({ ...db, riders }); setEditing(null); };
@@ -3867,7 +3905,7 @@ function ShiftsWindow({ db, save, company = null }) {
         // الشفتات القادمة اليوم (توقيت مسقط): اللي تبدأ خلال ساعة، واللي تبدأ بعد ساعة
         const nowHM = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false });
         const nowM = vehMin(nowHM);
-        const upcoming = todayWorkers.map((r) => ({ r, diff: vehMin(r.shiftStart || "") - nowM })).filter((x) => x.r.shiftStart && x.diff > 0);
+        const upcoming = todayWorkers.map((r) => ({ r, diff: vehMin(r.shiftStart || "") - nowM })).filter((x) => x.r.shiftStart && x.diff > 0 && (!upQ || qMatch(upQ, x.r)));
         const within = upcoming.filter((x) => x.diff <= 60).sort((a, b) => a.diff - b.diff);
         const later = upcoming.filter((x) => x.diff > 60).sort((a, b) => a.diff - b.diff);
         const Row = ({ x }) => (
@@ -3885,7 +3923,7 @@ function ShiftsWindow({ db, save, company = null }) {
         );
         return (
           <Card className="p-5">
-            <h3 className="font-bold text-slate-800 mb-3">{t("الشفتات القادمة اليوم", "Upcoming shifts today")}</h3>
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap"><h3 className="font-bold text-slate-800">{t("الشفتات القادمة اليوم", "Upcoming shifts today")}</h3><input className={inputCls + " w-56"} value={upQ} onChange={(e) => setUpQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} /></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="font-bold text-sm mb-1" style={{ color: "#c0341d" }}>{t("تبدأ خلال ساعة", "Starts within an hour")} ({within.length})</div>
@@ -3919,7 +3957,7 @@ function ShiftsWindow({ db, save, company = null }) {
 
       <Card className="p-5">
         <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2"><CalendarCheck size={18} color={BRAND.orange} /> {tr("روستر اليوم")} ({tr(DAY_AR[tc])})</h3>
+          <div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-slate-800 flex items-center gap-2"><CalendarCheck size={18} color={BRAND.orange} /> {tr("روستر اليوم")} ({tr(DAY_AR[tc])})</h3><input className={inputCls + " w-56"} value={rosQ} onChange={(e) => setRosQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} /></div>
           {roster.length > 0 && (
             <div className="flex gap-2 flex-wrap">
               <Btn size="sm" kind="ghost" onClick={() => setSelIds(roster.filter((r) => !isStarted(r)).map((r) => r.id))}>{t("تحديد الكل", "Select all")}</Btn>
