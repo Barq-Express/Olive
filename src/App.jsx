@@ -2428,9 +2428,9 @@ function AttendanceTab({ company, db, save }) {
   const [date, setDate] = useState(dates[0] || todayStr());
   const areas = Array.from(new Set(db.riders.filter((r) => r.company === company).map((r) => r.area).filter(Boolean))).sort();
   const hasFile = db.imports.some((im) => im.company === company && im.date === date);
-  const presentOn = (rid) => db.imports.some((im) => im.company === company && im.date === date && im.results.some((r) => r.riderId === rid && (r.orders > 0 || r.cod > 0))) || !!db.attendance[rid + ":" + date];
+  const presentOn = (rid) => db.imports.some((im) => im.company === company && im.date === date && im.results.some((r) => r.riderId === rid && (r.orders > 0 || r.cod > 0 || Number(r.hours) > 0))) || !!db.attendance[rid + ":" + date];
   const excuseOf = (rid) => (db.excuses || {})[rid + ":" + date];
-  const perfOn = (rid) => { for (const im of db.imports) { if (im.company === company && im.date === date) { const rr = im.results.find((x) => x.riderId === rid); if (rr) return { hours: Number(rr.hours) || 0, accept: pctAccept(rr.accept) }; } } return { hours: 0, accept: 0 }; };
+  const perfOn = (rid) => { for (const im of db.imports) { if (im.company === company && im.date === date) { const rr = im.results.find((x) => x.riderId === rid); if (rr) return { hours: Number(rr.hours) || 0, accept: pctAccept(rr.accept), orders: Number(rr.orders) || 0 }; } } return { hours: 0, accept: 0, orders: 0 }; };
   const [excuseFor, setExcuseFor] = useState(null);
   const [exType, setExType] = useState("sick");
   const [exNote, setExNote] = useState("");
@@ -2490,7 +2490,7 @@ function AttendanceTab({ company, db, save }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
-            {[tr("المندوب"), "ID", tr("الهاتف"), tr("المنطقة"), tr("النوع"), t("الحالة", "Status"), t("الأداء (فول تايم)", "Performance (FT)"), t("العذر", "Excuse")].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
+            {[tr("المندوب"), "ID", tr("الهاتف"), tr("المنطقة"), tr("النوع"), t("الحالة", "Status"), t("الطلبات", "Orders"), t("الأداء (فول تايم)", "Performance (FT)"), t("العذر", "Excuse")].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.slice((apage - 1) * APER, apage * APER).map((r) => (
@@ -2505,6 +2505,7 @@ function AttendanceTab({ company, db, save }) {
                     {r.present ? t("حاضر ✓", "Present ✓") : t("غايب ✗", "Absent ✗")}
                   </button>
                 </td>
+                <td className="px-3 text-sm font-semibold">{r.present ? (() => { const o = perfOn(r.id).orders; const red = o < 5; return <span style={{ color: red ? "#c0341d" : "#0f9d58" }}>{o}{red ? " 🔴" : ""}</span>; })() : <span className="text-slate-300">—</span>}</td>
                 <td className="px-3">
                   {r.type === "Full Time" ? (() => { const p = perfOn(r.id); if (!p.hours && !p.accept) return <span className="text-slate-300">—</span>; const hRed = p.hours > 0 && p.hours < HOURS_MIN; const aRed = p.accept > 0 && p.accept < ACCEPT_MIN; return (
                     <span className="text-xs font-semibold inline-flex gap-2">
