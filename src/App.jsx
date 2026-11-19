@@ -2636,8 +2636,16 @@ const CTABS = [
 ];
 
 // جدول المناديب الفول تايم: أيام الدوام، وقت الشفت، وأيام الإجازة
-function FTScheduleTab({ db, company }) {
+function FTScheduleTab({ db, company, save }) {
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null);
+  const openEdit = (r) => setEditing({ id: r.id, name: r.name, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
+  const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
+  // نحدّث حقول الشفت بس (ما نكتب بيانات المندوب كاملة عشان ما نكتب فوق تعديل ثاني)
+  const saveShift = () => {
+    const riders = db.riders.map((x) => (x.id === editing.id ? { ...x, shiftDays: editing.shiftDays, shiftStart: editing.shiftStart, shiftEnd: editing.shiftEnd } : x));
+    save({ ...db, riders }); setEditing(null);
+  };
   const list = db.riders
     .filter((r) => r.type === "Full Time" && (!company || r.company === company)
       && (!q || (r.name + " " + (r.phone || "") + " " + (r.companyId || "")).toLowerCase().includes(q.toLowerCase())))
@@ -2649,7 +2657,7 @@ function FTScheduleTab({ db, company }) {
         <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
       </div>
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المندوب", "Rider"), "ID", t("المنطقة", "Area"), t("أيام الدوام", "Work days"), t("وقت الشفت", "Shift time"), t("أيام الإجازة", "Off days")].map((h) => <th key={h} className="py-2 px-3 font-semibold text-start">{h}</th>)}</tr></thead>
+        <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المندوب", "Rider"), "ID", t("المنطقة", "Area"), t("أيام الدوام", "Work days"), t("وقت الشفت", "Shift time"), t("أيام الإجازة", "Off days"), t("تعديل", "Edit")].map((h) => <th key={h} className="py-2 px-3 font-semibold text-start">{h}</th>)}</tr></thead>
         <tbody>{list.map((r) => {
           const on = DAY_CODES.filter((d) => (r.shiftDays || []).includes(d));
           const off = on.length ? DAY_CODES.filter((d) => !on.includes(d)) : [];
@@ -2661,10 +2669,30 @@ function FTScheduleTab({ db, company }) {
               <td className="px-3 text-xs">{on.length ? on.map((d) => DAY_AR[d]).join(tr("، ")) : <span className="text-slate-300">{t("بدون شفتات", "No shifts")}</span>}</td>
               <td className="px-3 font-bold" dir="ltr">{r.shiftStart ? r.shiftStart + " – " + (r.shiftEnd || "—") : "—"}</td>
               <td className="px-3 text-xs text-slate-500">{off.length ? off.map((d) => DAY_AR[d]).join(tr("، ")) : "—"}</td>
+              <td className="px-3"><Btn kind="ghost" size="sm" onClick={() => openEdit(r)}><Pencil size={13} /> {t("شفت", "Shift")}</Btn></td>
             </tr>);
         })}</tbody>
       </table></div>
       {list.length === 0 && <p className="text-sm text-slate-400 py-6 text-center">{t("لا يوجد مناديب فول تايم", "No Full Time riders")}</p>}
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? t("شفت — ", "Shift — ") + editing.name : ""}>
+        {editing && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label={t("بداية الشفت", "Shift start")}><input type="time" className={inputCls} value={editing.shiftStart} onChange={(e) => setEditing({ ...editing, shiftStart: e.target.value })} /></Field>
+              <Field label={t("نهاية الشفت", "Shift end")}><input type="time" className={inputCls} value={editing.shiftEnd} onChange={(e) => setEditing({ ...editing, shiftEnd: e.target.value })} /></Field>
+            </div>
+            <div>
+              <span className="block text-xs font-semibold text-slate-500 mb-2">{t("أيام الدوام", "Work days")}</span>
+              <div className="flex flex-wrap gap-2">
+                {DAY_CODES.map((d) => { const on = editing.shiftDays.includes(d); return (
+                  <button key={d} onClick={() => toggleDay(d)} className="px-3 py-1.5 rounded-lg text-xs font-semibold border" style={on ? { background: BRAND.orange, color: "#fff", borderColor: BRAND.orange } : { background: "#fff", color: "#64748b", borderColor: "#e2e8f0" }}>{DAY_AR[d]}</button>
+                ); })}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2"><Btn kind="ghost" onClick={() => setEditing(null)}>{t("إلغاء", "Cancel")}</Btn><Btn onClick={saveShift}>{t("حفظ الشفت", "Save shift")}</Btn></div>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -3195,7 +3223,7 @@ function CompanyWindow({ company, db, save, user, onRefresh }) {
         {tab === "attendance" && <AttendanceTab company={company} db={db} save={save} />}
         {tab === "monthly" && <MonthlyTab company={company} db={db} />}
         {tab === "shifts" && <ShiftsWindow db={db} save={save} company={company} />}
-        {tab === "ftsched" && <FTScheduleTab db={db} company={company} />}
+        {tab === "ftsched" && <FTScheduleTab db={db} company={company} save={save} />}
         {tab === "reports" && <ReportsScoped db={db} company={company} />}
       </div>
     </div>
