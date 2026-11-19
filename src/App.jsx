@@ -2447,15 +2447,17 @@ function AttendanceTab({ company, db, save }) {
     save({ ...db, attendance: att });
   };
   const base = db.riders.filter((r) => r.company === company);
+  // الغياب = اللي عليه شفت في هذا اليوم ولم يداوم. اللي ما عليه شفت ذاك اليوم ما يُحسب غايب
+  const schedOn = (r) => (r.shiftDays || []).includes(DAY_CODES[new Date(date + "T12:00:00+04:00").getDay()]);
   const rows = base.map((r) => ({ ...r, present: presentOn(r.id) })).filter((r) => (
     (r.name.includes(q) || (r.phone || "").includes(q) || (r.companyId || "").includes(q)) &&
     (typeF === "all" || r.type === typeF) &&
     (areaF === "all" || (r.area || "") === areaF) &&
     (statusF === "all"
       || (statusF === "present" && r.present)
-      || (statusF === "absent" && !r.present)
-      || (statusF === "excused" && !r.present && !!excuseOf(r.id))
-      || (statusF === "unexcused" && !r.present && !excuseOf(r.id))
+      || (statusF === "absent" && !r.present && schedOn(r))
+      || (statusF === "excused" && !r.present && schedOn(r) && !!excuseOf(r.id))
+      || (statusF === "unexcused" && !r.present && schedOn(r) && !excuseOf(r.id))
       || (statusF === "below" && r.type === "Full Time" && (() => { const p = perfOn(r.id); return (p.accept > 0 && p.accept < ACCEPT_MIN) || (p.hours > 0 && p.hours < HOURS_MIN); })()))
   ));
   const presentCount = base.filter((r) => presentOn(r.id)).length;
@@ -2481,7 +2483,7 @@ function AttendanceTab({ company, db, save }) {
 
       <div className="flex gap-4 text-xs mb-3">
         <span style={{ color: "#0f9d58" }}>{t("حاضر", "Present")}: <b>{presentCount}</b></span>
-        <span style={{ color: "#c0341d" }}>{t("غايب", "Absent")}: <b>{base.length - presentCount}</b></span>
+        <span style={{ color: "#c0341d" }}>{t("غايب", "Absent")}: <b>{base.filter((r) => schedOn(r) && !presentOn(r.id)).length}</b></span>
         {!hasFile && <span className="text-slate-400">{t("لا يوجد ملف لهذا اليوم — يمكن التسجيل اليدوي", "No file for this day — manual marking allowed")}</span>}
       </div>
 
