@@ -542,6 +542,7 @@ function normalizeDB(db) {
     codAdjustments: db.codAdjustments || [],
     codDeductions: db.codDeductions || [], // خصومات COD من الراتب (نظام شهري)
     payNowOnly: db.payNowOnly,
+    payPauses: db.payPauses || [],           // فترات إيقاف الدفع (ممنوع رفع إيصالات فيها، الحالات ما تتغير)
     balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
     balanceIds: db.balanceIds || [],
     ftPayRules: db.ftPayRules || [],         // قواعد راتب الفول تايم (شهري/بالساعة لكل منطقة)
@@ -3296,6 +3297,49 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
 const PAY_PER_SHEET_START = "2026-10-01"; // نظام الدفع لكل شيت يبدأ من هذا التاريخ
 const PAY_NOW_ONLY = true;  // true = المندوب لازم يضغط «ادفع الآن» | false = يرفع الإيصال بحرية
 const NEW_SYSTEM_START = "2026-10"; // النظام الجديد (الرصيد الرئيسي) يبدأ من أكتوبر — ما قبله يُسدّد عبر المالية
+function PayPauseCard({ db, save, by }) {
+  const [pFrom, setPFrom] = useState("");
+  const [pTo, setPTo] = useState("");
+  const pauses = (db.payPauses || []).slice().sort((a, b) => String(b.from).localeCompare(String(a.from)));
+  const addPause = () => {
+    if (!pFrom || !pTo) return alert(t("اختر تاريخ البداية والنهاية", "Pick start and end dates"));
+    if (pTo < pFrom) return alert(t("تاريخ النهاية أقدم من البداية", "End date is before start date"));
+    const at = new Date().toISOString().slice(0, 16).replace("T", " ");
+    save({ ...db, payPauses: [...(db.payPauses || []), { id: uid(), from: pFrom, to: pTo, at, by: by || "" }] });
+    setPFrom(""); setPTo("");
+  };
+  const resume = (id) => {
+    if (!window.confirm(t("تستأنف الدفع لهذه الفترة؟ الحالات ترجع كما كانت.", "Resume payments for this range? Statuses stay as they were."))) return;
+    save({ ...db, payPauses: (db.payPauses || []).filter((p) => p.id !== id) });
+  };
+  return (
+    <div className="border-t border-slate-100 pt-4 mt-4">
+      <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Clock size={16} /> {t("إيقاف الدفع لفترة", "Pause Payments for a Period")}</h4>
+      <p className="text-xs text-slate-500 mb-3">{t("المندوب ما يقدر يرفع إيصالات في الأيام المحددة، والأيام الثانية تبقى مفتوحة. الحالات ما تتغير، وعند الاستئناف ترجع كما كانت.", "Riders can't upload receipts on the selected days; other days stay open. Statuses don't change, and resuming restores them.")}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t("من", "From")}><input type="date" className={inputCls} value={pFrom} onChange={(e) => setPFrom(e.target.value)} /></Field>
+        <Field label={t("إلى", "To")}><input type="date" className={inputCls} value={pTo} onChange={(e) => setPTo(e.target.value)} /></Field>
+      </div>
+      <div className="mt-3"><Btn kind="dark" onClick={addPause}>{t("إيقاف الدفع لهذه الفترة", "Pause payments for this range")}</Btn></div>
+      {pauses.length === 0 ? (
+        <p className="text-[11px] text-slate-400 mt-3">{t("ما فيه إيقاف فعّال حالياً", "No active pauses")}</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {pauses.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <div>
+                <span dir="ltr" className="font-semibold">{p.from} → {p.to}</span>
+                <div className="text-[11px] text-slate-400">{t("أوقفه", "Paused by")} {p.by} · {p.at}</div>
+              </div>
+              <Btn kind="ghost" size="sm" onClick={() => resume(p.id)}>{t("استئناف", "Resume")}</Btn>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RiderPortal({ db, riderId, creds, refresh }) {
   const rider = db.riders.find((r) => r.id === riderId);
   const [form, setForm] = useState({ amount: "", reference: "", date: todayStr(), receipt: "" });
@@ -3386,10 +3430,12 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   };
   const submit = () => {
     if (payNowOnly && !payFor) { alert(t("لرفع إيصال، اضغط «ادفع الآن» بجانب اليوم المطلوب في سجل العمل.", "To upload a receipt, press Pay Now next to the day in Work History.")); return; }
-    if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك رفع الإيصال فقط من الساعة " + w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can upload receipts only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; }
+    const pauseHit = (db.payPauses || []).find((p) => normDay(form.date) >= normDay(p.from) && normDay(form.date) <= normDay(p.to));
+    if (pauseHit) { alert(t("⚠️ رفع الإيصالات موقوف لهذا التاريخ مؤقتاً. تواصل مع الإدارة.", "⚠️ Receipt upload is temporarily paused for this date. Contact management.")); return; }
+    if (!codWindowOpen(db.codWindow)) { const w = db.codWindow || {}; alert(t("⚠️ رفع التحويلات مغلق الآن.\n\nيمكنك رفع الإيصال فقط من الساعة "+ w.start + " حتى " + w.end + " (بتوقيت عُمان).\nالرجاء المحاولة خلال هذه الفترة.", "⚠️ Transfer submission is closed now.\n\nYou can upload receipts only between " + w.start + " and " + w.end + " (Oman time).\nPlease try during this window.")); return; }
     if (!form.amount || !form.reference) return alert(tr("المبلغ والرقم المرجعي مطلوبان"));
-    supabase.rpc("rider_submit_transfer", { p_phone: creds.phone, p_password: creds.password, p_amount: Number(form.amount), p_reference: String(form.reference).trim(), p_date: form.date, p_receipt: form.receipt || "" })
-      .then(({ data, error }) => { if (error) return alert(tr("تعذّر إرسال التحويل، حاول مرة أخرى")); if (data && data.windowClosed) return alert(t("انتهى وقت رفع التحويلات لهذا اليوم. الرجاء المحاولة في الفترة القادمة.", "The transfer window has closed for now. Please try in the next window.")); if (data && data.duplicateRef) return alert(t("⚠️ هذا الرقم المرجعي مُستخدم سابقاً. لا يمكن استخدام نفس رقم التحويل مرتين.", "⚠️ This reference number was already used. You can't reuse the same transfer reference.")); if (data && data.error) return alert(t("تعذّر إرسال التحويل: ", "Submit failed: ") + data.error); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); setPayFor(null); alert(t("✅ تم إرسال التحويل بنجاح! سيظهر في سجل تحويلاتك قيد المراجعة.", "✅ Transfer submitted successfully! It will appear in your history under review.")); refresh(); });
+    supabase.rpc("rider_submit_transfer", { p_phone: creds.phone, p_password: creds.password, p_amount: Number(form.amount), p_reference: String(form.reference).trim(), p_date: normDay(form.date), p_receipt: form.receipt || "" })
+      .then(({ data, error }) => { if (error) return alert(tr("تعذّر إرسال التحويل، حاول مرة أخرى")); if (data && data.paused) return alert(t("⚠️ رفع الإيصالات موقوف لهذا التاريخ مؤقتاً. تواصل مع الإدارة.", "⚠️ Receipt upload is temporarily paused for this date. Contact management.")); if (data && data.windowClosed) return alert(t("انتهى وقت رفع التحويلات لهذا اليوم. الرجاء المحاولة في الفترة القادمة.", "The transfer window has closed for now. Please try in the next window.")); if (data && data.duplicateRef) return alert(t("⚠️ هذا الرقم المرجعي مُستخدم سابقاً. لا يمكن استخدام نفس رقم التحويل مرتين.", "⚠️ This reference number was already used. You can't reuse the same transfer reference.")); if (data && data.error) return alert(t("تعذّر إرسال التحويل: ", "Submit failed: ") + data.error); setForm({ amount: "", reference: "", date: todayStr(), receipt: "" }); setPayFor(null); alert(t("✅ تم إرسال التحويل بنجاح! سيظهر في سجل تحويلاتك قيد المراجعة.", "✅ Transfer submitted successfully! It will appear in your history under review.")); refresh(); });
   };
   const [upLoading, setUpLoading] = useState(false);
   const [upErr, setUpErr] = useState("");
@@ -6688,16 +6734,16 @@ export default function App() {
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
         const st = (data && data.data) || {};
         const cw = st.codWindow || { enabled: false };
-        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly, balanceMode: st.balanceMode, balanceIds: st.balanceIds } : cur));
+        setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly, balanceMode: st.balanceMode, balanceIds: st.balanceIds, payPauses: st.payPauses || [] } : cur));
       }).catch(() => { setRider((cur) => (cur ? { ...cur, codWindow: { enabled: false } } : cur)); });
     }
     const id = setInterval(() => {
       supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => {
-        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly, balanceMode: cur.balanceMode, balanceIds: cur.balanceIds } : cur));
+        if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly, balanceMode: cur.balanceMode, balanceIds: cur.balanceIds, payPauses: cur.payPauses } : cur));
       });
       // حدّث إعداد النافذة والخصومات دورياً أيضاً
       supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
-        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly, balanceMode: data.data.balanceMode, balanceIds: data.data.balanceIds } : cur));
+        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly, balanceMode: data.data.balanceMode, balanceIds: data.data.balanceIds, payPauses: data.data.payPauses || [] } : cur));
       });
     }, 30000);
     return () => clearInterval(id);
@@ -6786,11 +6832,11 @@ export default function App() {
   }
 
   if (rider) {
-    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments, payNowOnly: rider.payNowOnly, balanceMode: rider.balanceMode, balanceIds: rider.balanceIds }); });
+    const refresh = () => supabase.rpc("rider_login", { p_phone: rider.creds.phone, p_password: rider.creds.password }).then(({ data }) => { if (data) setRider({ view: normalizeDB(data), creds: rider.creds, codWindow: rider.codWindow, codDeductions: rider.codDeductions, codAdjustments: rider.codAdjustments, payNowOnly: rider.payNowOnly, balanceMode: rider.balanceMode, balanceIds: rider.balanceIds, payPauses: rider.payPauses }); });
     const logoutRider = () => { try { localStorage.removeItem("mrd_rider"); } catch (e) {} setRider(null); };
     const rd = rider.view.riders[0];
     if (!rd) { logoutRider(); return null; }
-    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [], payNowOnly: (rider.payNowOnly !== undefined ? rider.payNowOnly : rider.view.payNowOnly), balanceMode: (rider.balanceMode !== undefined ? rider.balanceMode : rider.view.balanceMode), balanceIds: (rider.balanceIds !== undefined ? rider.balanceIds : rider.view.balanceIds) };
+    const riderView = { ...rider.view, codWindow: rider.codWindow !== undefined ? rider.codWindow : { enabled: false }, codDeductions: rider.codDeductions || rider.view.codDeductions || [], codAdjustments: rider.codAdjustments || rider.view.codAdjustments || [], payNowOnly: (rider.payNowOnly !== undefined ? rider.payNowOnly : rider.view.payNowOnly), balanceMode: (rider.balanceMode !== undefined ? rider.balanceMode : rider.view.balanceMode), balanceIds: (rider.balanceIds !== undefined ? rider.balanceIds : rider.view.balanceIds), payPauses: (rider.payPauses !== undefined ? rider.payPauses : (rider.view.payPauses || [])) };
     return (
       <div dir={dirOf()} className="min-h-screen bg-slate-100" data-lang={lang}>
         <Topbar user={{ name: rd.name, role: "Rider" }} onLogout={logoutRider} onMenu={null} title={t("بوابة المندوب", "Rider Portal")} logo onToggleLang={toggleLang} />
@@ -6917,6 +6963,7 @@ export default function App() {
               </div>
               <p className="text-[11px] text-slate-400 mt-2">{t("الحالي:", "Current:")} {codWindowOpen(db.codWindow) ? <span style={{ color: "#0f9d58" }}>{t("مفتوحة الآن ✓", "Open now ✓")}</span> : <span style={{ color: "#c0341d" }}>{t("مغلقة الآن", "Closed now")}</span>}</p>
               <p className="text-[11px] text-amber-600 mt-1">{t("⚠️ لتفعيل المنع على الخادم أيضاً، شغّل ملف SQL المرفق مرة واحدة.", "⚠️ To enforce on the server too, run the attached SQL once.")}</p>
+              <PayPauseCard db={db} save={save} by={(user && (user.name || user.email)) || ""} />
               <div className="border-t border-slate-100 pt-4 mt-4">
                 <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Upload size={16} /> {t("طريقة رفع المندوب للإيصالات", "Rider Receipt Upload Mode")}</h4>
                 <label className="flex items-center gap-2 text-sm cursor-pointer mt-2"><input type="checkbox" checked={db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY} onChange={(e) => save({ ...db, payNowOnly: e.target.checked })} /> {t("إلزام الدفع عبر زر «ادفع الآن» فقط (منع الرفع الحر)", "Require payment via Pay Now only (block free upload)")}</label>
