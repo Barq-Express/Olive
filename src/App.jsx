@@ -6723,8 +6723,10 @@ export default function App() {
     setDb(next);
     const changed = [];
     const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
-    keys.forEach((k) => { if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) changed.push(k); });
+    keys.forEach((k) => { if (k === "auditLog") return; if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) changed.push(k); });
     if (changed.length === 0) return;
+    // سجل التغييرات ما يرسل مع كل حفظ (يثقّل الطلب)، ينكتب بطلب منفصل بعد نجاح الحفظ
+    const stripAudit = (x) => { const c = { ...x }; delete c.auditLog; return c; };
     const failSave = () => { dbRef.current = prev; setDb(prev); alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)")); };
     // دمج ذكي: نقرأ أحدث نسخة من السيرفر، ونطبّق على القوائم فقط التعديلات اللي سويتها (إضافة/تعديل/حذف بالـ id)
     // بهذا ما يُمسح أي تحويل/إيصال/تسجيل أرسله المندوب أو موظف آخر بعد ما فتحت الصفحة
@@ -6752,11 +6754,12 @@ export default function App() {
       // الدمج يصير على السيرفر داخل قفل الصف (app_state_merge): ما يضيع إيصال أو قرار حتى لو صار بنفس اللحظة
       let res = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        res = await supabase.rpc("app_state_merge", { p_next: next, p_prev: prev, p_at: at });
+        res = await supabase.rpc("app_state_merge", { p_next: stripAudit(next), p_prev: stripAudit(prev), p_at: at });
         if (!res.error && res.data) break;
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
       if (!res || res.error || !res.data) { console.error(res && res.error); return failSave(); }
+      if (auditNew.length) supabase.rpc("app_audit_append", { p_entries: auditNew }).then(() => {}, () => {});
       const finalDb = normalizeDB(res.data);
       dbRef.current = finalDb; setDb(finalDb);
     })();
