@@ -1208,11 +1208,12 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
 }
 
 function Riders({ db, save, company, user }) {
-  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all");
+  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all"); const [statusF, setStatusF] = useState("all");
   const [editing, setEditing] = useState(null); const [bulk, setBulk] = useState(false);
   const scoped = db.riders.filter((r) => (!company || r.company === company));
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
   const areas = Array.from(new Set(scoped.map((r) => r.area).filter(Boolean))).sort();
+  const statuses = Array.from(new Set(scoped.map((r) => r.status).filter(Boolean))).sort();
   const blank = { name: "", phone: "", companyId: "", civil: "", area: "", commission: "", company: company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "", status: "Active", bank: "", bankName: "", swift: "", notes: "", email: "", username: "", password: "1234", codAgent: "", nationality: "", vehicleType: "" };
   const list = scoped.filter((r) =>
     (company || cf === "all" || r.company === cf) &&
@@ -1220,6 +1221,7 @@ function Riders({ db, save, company, user }) {
     (natf === "all" || natClass(r.nationality) === natf) &&
     (vehf === "all" || (r.vehicleType || "") === vehf) &&
     (typef === "all" || r.type === typef) &&
+    (statusF === "all" || (r.status || "") === statusF) &&
     (r.name.includes(q) || r.phone.includes(q) || (r.companyId || "").includes(q) || (r.civil || "").includes(q) || (r.area || "").includes(q)));
   const isAdmin = user && (user.role === "Admin" || user.role === "Operations Manager");
   const [resetOpen, setResetOpen] = useState(false);
@@ -1301,6 +1303,7 @@ function Riders({ db, save, company, user }) {
           <div className="relative"><Search size={16} className="absolute right-3 top-2.5 text-slate-400" />
             <input className="rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm w-56" placeholder={t("بحث: اسم / رقم / ID / منطقة", "Search: name / phone / ID / area")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
           {!company && <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={cf} onChange={(e) => setCf(e.target.value)}><option value="all">{tr("كل الشركات")}</option>{COMPANIES.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>}
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={statusF} onChange={(e) => setStatusF(e.target.value)}><option value="all">{t("كل الحالات", "All statuses")}</option>{statuses.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={af} onChange={(e) => setAf(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={natf} onChange={(e) => setNatf(e.target.value)}><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عمانيين", "Omani")}</option><option value="foreign">{t("أجانب", "Foreign")}</option><option value="unknown">{t("غير محدد", "Unspecified")}</option></select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={vehf} onChange={(e) => setVehf(e.target.value)}><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سيارة", "Car")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
