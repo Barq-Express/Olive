@@ -5276,11 +5276,12 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
     if (rec && (db.transfers || []).some((x) => x.riderId === rid)) { alert(t("ما نقدر نتراجع: هذا المندوب عنده تحويلات مسجلة.", "Cannot undo: this rider has recorded transfers.")); return; }
     save({ ...db, riders: rid ? db.riders.filter((x) => x.id !== rid) : db.riders, registrations: regs.map((x) => (x.id === r.id ? { ...x, converted: false, convertedAt: null, convertedRiderId: null } : x)) });
   };
+  const [coSel, setCoSel] = useState({}); // الشركة اللي يتحوّل لها المندوب (لكل طلب)
   const convert = (r) => {
     if (!regStepsDone(r)) return;
     const rider = {
       id: uid(), name: r.fullName, phone: r.phone, companyId: r.driverId || "", civil: r.idNumber || "", area: r.wilaya || "",
-      commission: "", company: r.company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "",
+      commission: "", company: coSel[r.id] || r.company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "",
       status: "Active", bank: r.bank || "", bankName: r.bankName || "", swift: r.swift || "", nationality: r.nationality || "", vehicleType: r.vehicleType || "",
       email: r.email || "", notes: r.notes || "", username: r.username || r.phone, password: r.password || "1234", lastWorked: null,
     };
@@ -5459,7 +5460,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
               </div>
               {r.converted
                 ? <div className="flex items-center gap-2 flex-wrap"><Pill color="#0f9d58">{t("تم التحويل إلى مندوب ✓", "Converted to driver ✓")}</Pill>{!readOnly && <button onClick={() => undoConvert(r)} className="text-xs font-semibold text-amber-700 underline">{t("تراجع عن التحويل", "Undo conversion")}</button>}</div>
-                : (!readOnly && !r.rejected && <Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn>)}
+                : (!readOnly && !r.rejected && <span className="inline-flex items-center gap-2 flex-wrap"><select className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none" value={coSel[r.id] || r.company || "Snoonu"} onChange={(e) => setCoSel({ ...coSel, [r.id]: e.target.value })}>{["Snoonu", "Talabat", "Aramex", "Olive"].map((c) => <option key={c} value={c}>{c}</option>)}</select><Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn></span>)}
             </div>
             {!r.converted && !regStepsDone(r) && <p className="text-xs text-slate-400 text-left">{t("أكمل جميع الخطوات لتفعيل التحويل.", "Complete all steps to enable conversion.")}</p>}
           </div>
