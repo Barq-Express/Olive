@@ -3813,6 +3813,7 @@ function ShiftsWindow({ db, save, company = null }) {
   // 0 = يبدأ خلال ساعة (فوق)، 1 = عليه دوام اليوم، 2 = عليه إجازة اليوم (تحت)
   const shiftBand = (r) => {
     const nowM = vehMin(new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Muscat", hour: "2-digit", minute: "2-digit", hour12: false }));
+    if (!(r.shiftDays || []).length) return 3; // ما عنده شفتات ثابتة (فريلانسر أو فول تايم بدون شفتات)
     if (!(r.shiftDays || []).includes(tc)) return 2;
     if (!r.shiftStart) return 1;
     const diff = vehMin(r.shiftStart) - nowM;
@@ -3824,8 +3825,8 @@ function ShiftsWindow({ db, save, company = null }) {
     && (r.name.includes(q) || (r.phone || "").includes(q) || (r.companyId || "").includes(q))
     && (typeF === "all" || r.type === typeF)
     && (areaF === "all" || (r.area || "") === areaF)
-    // تعيين الشفتات: اللي ما عليهم شفت اليوم، وعندهم شفت في أيام ثانية
-    && (r.shiftDays || []).length > 0 && !(r.shiftDays || []).includes(tc))
+    // تعيين الشفتات: كل اللي ما عليهم شفت اليوم (فريلانسر، فول تايم بإجازة، فول تايم بدون شفتات)
+    && !(r.shiftDays || []).includes(tc))
     // الترتيب: اللي يبدأ خلال ساعة فوق فوق، بعدين اللي عليه دوام اليوم، وفي الآخر اللي عليه إجازة
     .sort((a, b) => {
       const ra = shiftBand(a), rb = shiftBand(b);
@@ -3969,7 +3970,7 @@ function ShiftsWindow({ db, save, company = null }) {
               {(i === 0 || shiftBand(arr[i - 1]) !== shiftBand(r)) && (
                 <tr className="bg-slate-100">
                   <td colSpan={6} className="py-1.5 px-3 text-xs font-bold" style={{ color: shiftBand(r) === 0 ? "#c0341d" : shiftBand(r) === 1 ? BRAND.navy : "#64748b" }}>
-                    {shiftBand(r) === 0 ? t("تبدأ خلال ساعة", "Starts within an hour") : shiftBand(r) === 1 ? t("عليهم دوام اليوم", "Working today") : t("عليهم إجازة اليوم", "Off today")}
+                    {shiftBand(r) === 0 ? t("تبدأ خلال ساعة", "Starts within an hour") : shiftBand(r) === 1 ? t("عليهم دوام اليوم", "Working today") : shiftBand(r) === 2 ? t("عليهم إجازة اليوم", "Off today") : t("بدون شفتات ثابتة", "No fixed shifts")}
                   </td>
                 </tr>
               )}
