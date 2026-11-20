@@ -2639,6 +2639,12 @@ const CTABS = [
 function FTScheduleTab({ db, company, save }) {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null);
+  const [areaF, setAreaF] = useState("all");
+  const [statusF, setStatusF] = useState("all");
+  const [shiftF, setShiftF] = useState("all");
+  const [dayF, setDayF] = useState("all");
+  const [dayMode, setDayMode] = useState("work");
+  const resetFilters = () => { setQ(""); setAreaF("all"); setStatusF("all"); setShiftF("all"); setDayF("all"); setDayMode("work"); };
   const openEdit = (r) => setEditing({ id: r.id, name: r.name, shiftDays: r.shiftDays || [], shiftStart: r.shiftStart || "", shiftEnd: r.shiftEnd || "" });
   const toggleDay = (d) => setEditing((e) => ({ ...e, shiftDays: e.shiftDays.includes(d) ? e.shiftDays.filter((x) => x !== d) : [...e.shiftDays, d] }));
   // نحدّث حقول الشفت بس (ما نكتب بيانات المندوب كاملة عشان ما نكتب فوق تعديل ثاني)
@@ -2646,15 +2652,47 @@ function FTScheduleTab({ db, company, save }) {
     const riders = db.riders.map((x) => (x.id === editing.id ? { ...x, shiftDays: editing.shiftDays, shiftStart: editing.shiftStart, shiftEnd: editing.shiftEnd } : x));
     save({ ...db, riders }); setEditing(null);
   };
-  const list = db.riders
-    .filter((r) => r.type === "Full Time" && (!company || r.company === company)
-      && (!q || (r.name + " " + (r.phone || "") + " " + (r.companyId || "")).toLowerCase().includes(q.toLowerCase())))
+  const ftRiders = db.riders.filter((r) => r.type === "Full Time" && (!company || r.company === company));
+  const areas = Array.from(new Set(ftRiders.map((r) => r.area).filter(Boolean))).sort();
+  const list = ftRiders
+    .filter((r) => (!q || (r.name + " " + (r.phone || "") + " " + (r.companyId || "")).toLowerCase().includes(q.toLowerCase()))
+      && (areaF === "all" || (r.area || "") === areaF)
+      && (statusF === "all" || r.status === statusF)
+      && (shiftF === "all" || (shiftF === "with" ? (r.shiftDays || []).length > 0 : (r.shiftDays || []).length === 0))
+      && (dayF === "all" || (dayMode === "work"
+        ? (r.shiftDays || []).includes(dayF)
+        : (r.shiftDays || []).length > 0 && !(r.shiftDays || []).includes(dayF))))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <h3 className="font-bold text-slate-800">{t("جدول المناديب الفول تايم", "Full Time schedule")} <span className="text-xs font-normal text-slate-400">({list.length})</span></h3>
         <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
+      </div>
+      <div className="flex flex-wrap gap-2 mb-3 items-center">
+        <select className={inputCls + " w-40"} value={areaF} onChange={(e) => setAreaF(e.target.value)}>
+          <option value="all">{t("كل المناطق", "All areas")}</option>
+          {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select className={inputCls + " w-36"} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
+          <option value="all">{t("كل الحالات", "All statuses")}</option>
+          <option value="Active">{t("نشط", "Active")}</option>
+          <option value="Inactive">{t("غير نشط", "Inactive")}</option>
+        </select>
+        <select className={inputCls + " w-40"} value={shiftF} onChange={(e) => setShiftF(e.target.value)}>
+          <option value="all">{t("الكل (الشفتات)", "All (shifts)")}</option>
+          <option value="with">{t("عنده شفتات", "Has shifts")}</option>
+          <option value="without">{t("بدون شفتات", "No shifts")}</option>
+        </select>
+        <select className={inputCls + " w-36"} value={dayF} onChange={(e) => setDayF(e.target.value)}>
+          <option value="all">{t("كل الأيام", "All days")}</option>
+          {DAY_CODES.map((d) => <option key={d} value={d}>{DAY_AR[d]}</option>)}
+        </select>
+        <select className={inputCls + " w-32"} value={dayMode} disabled={dayF === "all"} onChange={(e) => setDayMode(e.target.value)}>
+          <option value="work">{t("يعمل ذلك اليوم", "Works that day")}</option>
+          <option value="off">{t("إجازة ذلك اليوم", "Off that day")}</option>
+        </select>
+        <Btn kind="ghost" size="sm" onClick={resetFilters}>{t("إعادة ضبط", "Reset")}</Btn>
       </div>
       <div className="overflow-x-auto"><table className="w-full text-sm">
         <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("المندوب", "Rider"), "ID", t("المنطقة", "Area"), t("أيام الدوام", "Work days"), t("وقت الشفت", "Shift time"), t("أيام الإجازة", "Off days"), t("تعديل", "Edit")].map((h) => <th key={h} className="py-2 px-3 font-semibold text-start">{h}</th>)}</tr></thead>
