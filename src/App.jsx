@@ -2667,7 +2667,10 @@ function FTScheduleTab({ db, company, save }) {
     <Card className="p-5">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <h3 className="font-bold text-slate-800">{t("جدول المناديب الفول تايم", "Full Time schedule")} <span className="text-xs font-normal text-slate-400">({list.length})</span></h3>
-        <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
+        <div className="flex gap-2 items-center flex-wrap">
+          <input className={inputCls + " w-64"} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("بحث: اسم / هاتف / ID", "Search: name / phone / ID")} />
+          <Btn kind="ghost" size="sm" onClick={() => exportExcel(list.map((r) => ({ المندوب: r.name, الهاتف: r.phone || "", ID: r.companyId || "", المنطقة: r.area || "", الحالة: r.status || "", من: r.shiftStart || "", الى: r.shiftEnd || "", أيام_الدوام: (r.shiftDays || []).map((d) => DAY_AR[d]).join("، "), أيام_الإجازة: (r.shiftDays || []).length ? DAY_CODES.filter((d) => !(r.shiftDays || []).includes(d)).map((d) => DAY_AR[d]).join("، ") : "", الشركة: r.company || "" })), "FullTime_Schedule_" + (company || "All"))}><Download size={14} /> Excel</Btn>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2 mb-3 items-center">
         <select className={inputCls + " w-40"} value={areaF} onChange={(e) => setAreaF(e.target.value)}>
