@@ -542,6 +542,7 @@ function normalizeDB(db) {
     codAdjustments: db.codAdjustments || [],
     codDeductions: db.codDeductions || [], // خصومات COD من الراتب (نظام شهري)
     payNowOnly: db.payNowOnly,
+    shiftCalls: db.shiftCalls || [],         // سجل مكالمات الشفتات (اليوم/القادمة)
     payPauses: db.payPauses || [],           // فترات إيقاف الدفع (ممنوع رفع إيصالات فيها، الحالات ما تتغير)
     balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
     balanceIds: db.balanceIds || [],
@@ -3263,7 +3264,7 @@ function CompanyWindow({ company, db, save, user, onRefresh }) {
         {tab === "recon" && <ReconTab company={company} db={db} save={save} />}
         {tab === "attendance" && <AttendanceTab company={company} db={db} save={save} />}
         {tab === "monthly" && <MonthlyTab company={company} db={db} />}
-        {tab === "shifts" && <ShiftsWindow db={db} save={save} company={company} />}
+        {tab === "shifts" && <ShiftsWindow db={db} save={save} company={company} user={user} />}
         {tab === "ftsched" && <FTScheduleTab db={db} company={company} save={save} />}
         {tab === "reports" && <ReportsScoped db={db} company={company} />}
       </div>
@@ -3938,7 +3939,58 @@ function ShiftBulkUpload({ company, riders, onApply, onClose }) {
   );
 }
 
-function ShiftsWindow({ db, save, company = null }) {
+const CALL_RESULTS = [
+  { v: "working", ar: "رد وأكد الدوام", en: "Answered, confirmed working" },
+  { v: "off", ar: "رد وقال م راح يداوم", en: "Answered, not working" },
+  { v: "moved", ar: "رد وطلب تغيير الوقت", en: "Answered, wants a time change" },
+  { v: "noans", ar: "ما رد", en: "No answer" },
+  { v: "other", ar: "أخرى", en: "Other" },
+];
+const callLabel = (v) => { const c = CALL_RESULTS.find((x) => x.v === v); return c ? t(c.ar, c.en) : v; };
+
+// سجل مكالمات للمندوب في اليوم الحالي (يُحفظ في db.shiftCalls)
+function ShiftCallLog({ db, save, rider, by }) {
+  const [open, setOpen] = useState(false);
+  const [res, setRes] = useState("working");
+  const [note, setNote] = useState("");
+  const today = todayStr();
+  const calls = (db.shiftCalls || []).filter((c) => c.riderId === rider.id && c.date === today).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const last = calls[0];
+  const addCall = () => {
+    const at = new Date().toLocaleString("en-GB", { timeZone: "Asia/Muscat", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(",", "");
+    save({ ...db, shiftCalls: [...(db.shiftCalls || []), { id: uid(), date: today, riderId: rider.id, at, by: by || "", result: res, note: note.trim() }] });
+    setNote(""); setOpen(false);
+  };
+  return (
+    <>
+      <button onClick={() => setOpen(true)} title={t("سجّل مكالمة", "Log call")} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">
+        <Phone size={13} /> {calls.length ? calls.length : ""}
+      </button>
+      {last && <span className="text-[11px] text-slate-500">{callLabel(last.result)}{last.note ? " — " + last.note : ""} · {last.at} · {last.by}</span>}
+      <Modal open={open} onClose={() => setOpen(false)} title={t("تسجيل مكالمة — ", "Call log — ") + rider.name}>
+        <div className="space-y-4">
+          <Field label={t("نتيجة الاتصال", "Call result")}>
+            <select className={inputCls} value={res} onChange={(e) => setRes(e.target.value)}>
+              {CALL_RESULTS.map((c) => <option key={c.v} value={c.v}>{t(c.ar, c.en)}</option>)}
+            </select>
+          </Field>
+          <Field label={t("ملاحظة (اختياري)", "Note (optional)")}>
+            <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("مثلاً: قال عنده مشوار", "e.g. says he has an errand")} />
+          </Field>
+          <div className="flex justify-end gap-2"><Btn kind="ghost" onClick={() => setOpen(false)}>{t("إلغاء", "Cancel")}</Btn><Btn onClick={addCall}>{t("حفظ المكالمة", "Save call")}</Btn></div>
+          {calls.length > 0 && (
+            <div className="border-t pt-3">
+              <div className="text-xs font-semibold text-slate-500 mb-2">{t("مكالمات اليوم", "Today's calls")}</div>
+              {calls.map((c) => <div key={c.id} className="text-xs py-1 border-b border-slate-100">{c.at} · {c.by} · {callLabel(c.result)}{c.note ? " — " + c.note : ""}</div>)}
+            </div>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function ShiftsWindow({ db, save, company = null, user }) {
   const [q, setQ] = useState("");
   const [cf, setCf] = useState("all");
   const [typeF, setTypeF] = useState("all");
@@ -4034,6 +4086,7 @@ function ShiftsWindow({ db, save, company = null }) {
               <div className="font-bold" dir="ltr">{x.r.shiftStart} – {x.r.shiftEnd || "—"}</div>
               <div className="text-xs text-slate-500">{t("يبدأ بعد " + x.diff + " د", "Starts in " + x.diff + " min")}</div>
             </div>
+            <ShiftCallLog db={db} save={save} rider={x.r} by={(user && (user.name || user.email)) || ""} />
             {x.r.phone && PERM_NOW.phone !== false && <a href={"tel:" + x.r.phone} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white" style={{ background: BRAND.navy }}>{t("اتصل", "Call")}</a>}
           </div>
         );
@@ -4093,6 +4146,7 @@ function ShiftsWindow({ db, save, company = null }) {
                   <input type="checkbox" className="w-4 h-4" checked={selIds.includes(r.id)} onChange={() => toggleSel(r.id)} />
                   <div className="w-16 text-center"><div className="font-extrabold text-slate-800">{r.shiftStart || "—"}</div><div className="text-[10px] text-slate-400">{r.shiftEnd ? tr("حتى ") + r.shiftEnd : ""}</div></div>
                   <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} {companyPill(r.company)}</div><div className="text-xs text-slate-500" dir="ltr">{PERM_NOW.phone === false ? "" : r.phone}</div></div>
+                  <ShiftCallLog db={db} save={save} rider={r} by={(user && (user.name || user.email)) || ""} />
                   {started ? (
                     <button onClick={() => toggleStart(r.id)} disabled={fromFile} title={fromFile ? t("مؤكّد من شيت الطلبات", "confirmed by orders sheet") : t("اضغط للتراجع", "click to undo")} className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#0f9d5822", color: "#0f9d58", cursor: fromFile ? "default" : "pointer" }}><CheckCircle2 size={13} /> {tr("بدأ الشفت ✓")}</button>
                   ) : (
