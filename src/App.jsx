@@ -6898,6 +6898,8 @@ export default function App() {
     if (changed.length === 0) return;
     // سجل التغييرات ما يرسل مع كل حفظ (يثقّل الطلب)، ينكتب بطلب منفصل بعد نجاح الحفظ
     const stripAudit = (x) => { const c = { ...x }; delete c.auditLog; return c; };
+    // نرسل بس المفاتيح اللي تغيّرت (السيرفر يتجاهل أي مفتاح ما تغيّر أصلاً) → الطلب أصغر بكثير
+    const pickChanged = (x) => { const o = {}; changed.forEach((k) => { if (k !== "auditLog") o[k] = x[k]; }); return o; };
     const failSave = (err) => {
       dbRef.current = prev; setDb(prev);
       let kb = 0; try { kb = Math.round(JSON.stringify(stripAudit(next)).length / 1024); } catch (e) {}
@@ -6930,7 +6932,7 @@ export default function App() {
       // الدمج يصير على السيرفر داخل قفل الصف (app_state_merge): ما يضيع إيصال أو قرار حتى لو صار بنفس اللحظة
       let res = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        res = await supabase.rpc("app_state_merge", { p_next: stripAudit(next), p_prev: stripAudit(prev), p_at: at });
+        res = await supabase.rpc("app_state_merge", { p_next: pickChanged(next), p_prev: pickChanged(prev), p_at: at });
         if (!res.error && res.data) break;
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
