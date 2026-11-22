@@ -6898,7 +6898,12 @@ export default function App() {
     if (changed.length === 0) return;
     // سجل التغييرات ما يرسل مع كل حفظ (يثقّل الطلب)، ينكتب بطلب منفصل بعد نجاح الحفظ
     const stripAudit = (x) => { const c = { ...x }; delete c.auditLog; return c; };
-    const failSave = () => { dbRef.current = prev; setDb(prev); alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)")); };
+    const failSave = (err) => {
+      dbRef.current = prev; setDb(prev);
+      let kb = 0; try { kb = Math.round(JSON.stringify(stripAudit(next)).length / 1024); } catch (e) {}
+      const detail = err ? "\n\n[" + (err.code || "-") + "] " + (err.message || "") + "\n" + tr("حجم البيانات: ") + kb + " KB" : "";
+      alert(tr("تعذّر حفظ التغيير — تحقّق من الاتصال وأعد المحاولة. (لم يتم حفظ أي شيء)") + detail);
+    };
     // دمج ذكي: نقرأ أحدث نسخة من السيرفر، ونطبّق على القوائم فقط التعديلات اللي سويتها (إضافة/تعديل/حذف بالـ id)
     // بهذا ما يُمسح أي تحويل/إيصال/تسجيل أرسله المندوب أو موظف آخر بعد ما فتحت الصفحة
     const mergeKey = (srvVal, prevVal, nextVal) => {
@@ -6929,7 +6934,7 @@ export default function App() {
         if (!res.error && res.data) break;
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
-      if (!res || res.error || !res.data) { console.error(res && res.error); return failSave(); }
+      if (!res || res.error || !res.data) { console.error(res && res.error); return failSave(res && res.error ? res.error : { message: "no data returned" }); }
       if (auditNew.length) supabase.rpc("app_audit_append", { p_entries: auditNew }).then(() => {}, () => {});
       const finalDb = normalizeDB(res.data);
       dbRef.current = finalDb; setDb(finalDb);
