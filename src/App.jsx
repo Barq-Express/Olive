@@ -6899,7 +6899,12 @@ export default function App() {
     // سجل التغييرات ما يرسل مع كل حفظ (يثقّل الطلب)، ينكتب بطلب منفصل بعد نجاح الحفظ
     const stripAudit = (x) => { const c = { ...x }; delete c.auditLog; return c; };
     // نرسل بس المفاتيح اللي تغيّرت (السيرفر يتجاهل أي مفتاح ما تغيّر أصلاً) → الطلب أصغر بكثير
-    const pickChanged = (x) => { const o = {}; changed.forEach((k) => { if (k !== "auditLog") o[k] = x[k]; }); return o; };
+    // الشيتات (imports) ضخمة: نرسل الشيت الجديد/المعدّل كامل، والباقي بس الـ id (السيرفر يفهم الباقي ما تغيّر)
+    const prevImpById = new Map(((prev && prev.imports) || []).map((i) => [i.id, i]));
+    const impSlim = (arr, isNext) => (arr || []).map((x) => (isNext
+      ? (JSON.stringify(x) === JSON.stringify(prevImpById.get(x.id)) ? { id: x.id } : x)
+      : { id: x.id }));
+    const pickChanged = (x, isNext) => { const o = {}; changed.forEach((k) => { if (k === "auditLog") return; o[k] = k === "imports" ? impSlim(x[k], isNext) : x[k]; }); return o; };
     const failSave = (err) => {
       dbRef.current = prev; setDb(prev);
       let kb = 0; try { kb = Math.round(JSON.stringify(stripAudit(next)).length / 1024); } catch (e) {}
@@ -6932,7 +6937,7 @@ export default function App() {
       // الدمج يصير على السيرفر داخل قفل الصف (app_state_merge): ما يضيع إيصال أو قرار حتى لو صار بنفس اللحظة
       let res = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        res = await supabase.rpc("app_state_merge", { p_next: pickChanged(next), p_prev: pickChanged(prev), p_at: at });
+        res = await supabase.rpc("app_state_merge", { p_next: pickChanged(next, true), p_prev: pickChanged(prev, false), p_at: at });
         if (!res.error && res.data) break;
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
