@@ -1908,7 +1908,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const availMonths = Array.from(new Set([...db.imports.map((im) => im.date), ...db.transfers.map((t) => t.date)].map((d) => String(d || "").slice(0, 7)).filter(Boolean))).sort().reverse();
   const pickMonth = (m) => { setMonthSel(m); if (!m) { setDueFrom(""); setDueTo(""); return; } const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate(); setDueFrom(m + "-01"); setDueTo(m + "-" + String(last).padStart(2, "0")); };
   // نظرة عامة لكل مندوب: كم عليه COD وهل حوّل
-  const rdrs = visibleRiders.filter((r) => r.status === "Active");
+  const rdrs = visibleRiders; // كل المناديب (النشط وغير النشط)، والفلتر تحت يعرض بس اللي عليهم مبالغ
   const dateActive = !!(dueFrom || dueTo); // هل فلتر التاريخ مفعّل؟
   const dueRows = rdrs.map((r) => {
     const m = dateActive ? riderMoneyRange(db, r.id, dueFrom, dueTo) : riderMoney(db, r.id);
