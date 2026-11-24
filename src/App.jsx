@@ -387,6 +387,14 @@ const omr = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDig
 const daysSince = (d) => (!d ? Infinity : Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 const normPhone = (v) => String(v || "").replace(/[^0-9]/g, "").replace(/^968/, "").replace(/^0+/, "");
 // أنواع المندوب اللي كان عليها خلال فترة معيّنة (يدعم التحويل بين فريلانسر وفول تايم)
+// نوع المندوب في يوم معيّن حسب سجل التحويلات (typeLog)
+const typeOnDate = (r, d) => {
+  const log = r.typeLog && r.typeLog.length ? r.typeLog : [{ type: r.type, from: "" }];
+  let t = log[0].type;
+  const s = String(d || "").slice(0, 10);
+  log.forEach((seg) => { if (seg.from && s >= String(seg.from).slice(0, 10)) t = seg.type; });
+  return t;
+};
 const riderTypesIn = (r, from, to) => {
   const log = r.typeLog && r.typeLog.length ? r.typeLog : [{ type: r.type, from: "" }];
   const lo = from || "0000-00-00", hi = to || "9999-12-31";
@@ -765,12 +773,15 @@ function riderMonthly(db, riderId) {
   });
 }
 // حساب مبالغ COD ضمن مدة (from/to بصيغة YYYY-MM-DD). أي طرف فارغ = بلا حد
-function riderMoneyRange(db, riderId, from, to) {
+function riderMoneyRange(db, riderId, from, to, typeF) {
   const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+  // إذا فيه نوع محدد: نحسب الطلبات والـ COD بس للأيام اللي كان فيها المندوب بهذا النوع
+  const rdrObj = (db.riders || []).find((x) => x.id === riderId);
+  const okT = (im) => !typeF || !rdrObj || typeOnDate(rdrObj, im.date) === typeF;
   const inRange = (d) => { const s = String(d || "").slice(0, 10); if (!s) return false; if (from && s < from) return false; if (to && s > to) return false; return true; };
   // COD الكلي = مجموع transferDue من الشيتات ضمن المدة + تعديلات COD المعتمدة ضمن المدة
-  const orderCod = db.imports.filter((im) => inRange(im.date)).reduce((a, im) => { const rr = im.results.find((x) => x.riderId === riderId); return a + (rr ? (Number(rr.transferDue) || 0) : 0); }, 0);
-  const orders = db.imports.filter((im) => inRange(im.date)).reduce((a, im) => { const rr = im.results.find((x) => x.riderId === riderId); return a + (rr ? (rr.orders || 0) : 0); }, 0);
+  const orderCod = db.imports.filter((im) => inRange(im.date) && okT(im)).reduce((a, im) => { const rr = im.results.find((x) => x.riderId === riderId); return a + (rr ? (Number(rr.transferDue) || 0) : 0); }, 0);
+  const orders = db.imports.filter((im) => inRange(im.date) && okT(im)).reduce((a, im) => { const rr = im.results.find((x) => x.riderId === riderId); return a + (rr ? (rr.orders || 0) : 0); }, 0);
   const codAdj = (db.codAdjustments || []).filter((a) => a.riderId === riderId && a.status === "approved" && inRange(a.at)).reduce((s, a) => s + (Number(a.delta) || 0), 0);
   const codToTransfer = orderCod + codAdj;
   const transferred = db.transfers.filter((t) => t.riderId === riderId && t.status === "Approved" && inRange(t.date)).reduce((a, t) => a + (Number(t.amount) || 0), 0);
@@ -1911,7 +1922,7 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
   const rdrs = visibleRiders; // كل المناديب (النشط وغير النشط)، والفلتر تحت يعرض بس اللي عليهم مبالغ
   const dateActive = !!(dueFrom || dueTo); // هل فلتر التاريخ مفعّل؟
   const dueRows = rdrs.map((r) => {
-    const m = dateActive ? riderMoneyRange(db, r.id, dueFrom, dueTo) : riderMoney(db, r.id);
+    const m = dateActive ? riderMoneyRange(db, r.id, dueFrom, dueTo, typeDue !== "all" ? typeDue : null) : riderMoney(db, r.id);
     const trs = db.transfers.filter((t) => t.riderId === r.id);
     const hasPending = trs.some((t) => !t.reconLabel && t.status !== "Rejected"); // أي تحويل لم يُبَت فيه = قيد المراجعة (نفس معيار الجدول الأسفل)
     const lastDecided = trs.filter((t) => t.decidedBy).slice(-1)[0];
@@ -2563,11 +2574,11 @@ function ReportsScoped({ db, company }) {
     let orders = 0, cod = 0;
     db.imports.filter((im) => (!company || im.company === company) && inR(im.date)).forEach((im) => { const rr = im.results.find((x) => x.riderId === rid); if (rr) { orders += rr.orders || 0; cod += (rr.transferDue != null ? rr.transferDue : rr.cod) || 0; } });
     const rider = db.riders.find((r) => r.id === rid);
+    // نفس حساب جدول مستحقات COD، ومقسّم حسب نوع المندوب في كل يوم
+    const pm = riderMoneyRange(db, rid, pFrom, pTo, pType);
     let dues = 0;
-    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); dues = orders * rate; } }
-    // نفس حساب جدول مستحقات COD (يشمل التعديلات المعتمدة) عشان الرقمين يتطابقون
-    const pm = riderMoneyRange(db, rid, pFrom, pTo);
-    return { orders, cod: pm.codToTransfer, dues };
+    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); dues = pm.orders * rate; } }
+    return { orders: pm.orders, cod: pm.codToTransfer, dues };
   };
   const rows = useMemo(() => {
     if (type === "fl5") {
