@@ -1922,7 +1922,9 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
     else { key = "pending"; label = t("لم يحوّل (Pending)", "Not transferred (Pending)"); color = "#d97706"; }
     return { r, m, key, label, color, hasPending };
   }).filter((x) => dateActive ? (x.m.codToTransfer > 0.001 || x.m.deducted > 0.001) : x.m.codToTransfer > 0.001);
-  const shownDue = dueRows.filter((x) => (typeDue === "all" || x.r.type === typeDue) && (natDue === "all" || natClass(x.r.nationality) === natDue) && (statusF === "all" || x.key === statusF) && (agentF === "all" || (agentF === "none" ? !x.r.codAgent : nEmail(x.r.codAgent) === nEmail(agentF))) && (x.r.name.includes(q) || (x.r.phone || "").includes(q) || (x.r.companyId || "").includes(q)));
+  // النوع: إذا فيه فترة، نستخدم نوع المندوب خلال الفترة (مثل التقرير) مو نوعه الحالي
+  const typeMatch = (x) => (typeDue === "all" || (dateActive ? Array.from(riderTypesIn(x.r, dueFrom, dueTo)).includes(typeDue) : x.r.type === typeDue));
+  const shownDue = dueRows.filter((x) => typeMatch(x) && (natDue === "all" || natClass(x.r.nationality) === natDue) && (statusF === "all" || x.key === statusF) && (agentF === "all" || (agentF === "none" ? !x.r.codAgent : nEmail(x.r.codAgent) === nEmail(agentF))) && (x.r.name.includes(q) || (x.r.phone || "").includes(q) || (x.r.companyId || "").includes(q)));
   return (
     <div className="space-y-4">
       <div className="flex gap-2 border-b border-slate-200">
