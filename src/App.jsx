@@ -2563,7 +2563,9 @@ function ReportsScoped({ db, company }) {
     const rider = db.riders.find((r) => r.id === rid);
     let dues = 0;
     if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); dues = orders * rate; } }
-    return { orders, cod, dues };
+    // نفس حساب جدول مستحقات COD (يشمل التعديلات المعتمدة) عشان الرقمين يتطابقون
+    const pm = riderMoneyRange(db, rid, pFrom, pTo);
+    return { orders, cod: pm.codToTransfer, dues };
   };
   const rows = useMemo(() => {
     if (type === "fl5") {
