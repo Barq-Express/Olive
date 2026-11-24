@@ -5473,8 +5473,13 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
   const perStaff = {}; agents.forEach((s) => { perStaff[s.id] = regs.filter((r) => r.assignee === s.id && !r.converted).length; });
 
   const regAreas = Array.from(new Set(visibleRegs.map((r) => (r.wilaya || r.area || "").trim()).filter(Boolean))).sort();
+  // البحث: بدون فرق بين الحروف الكبيرة والصغيرة، ويشمل ID المندوب بعد التحويل (مع اسم الشركة أو بدونه)
+  const nq = q.trim().toLowerCase().replace(/\s+/g, " ");
+  const regRider = (r) => (r.convertedRiderId ? (db.riders || []).find((x) => x.id === r.convertedRiderId) : null);
+  const hit = (v) => String(v || "").toLowerCase().includes(nq);
   const rows = visibleRegs.filter((r) => (
-    (r.fullName.includes(q) || (r.phone || "").includes(q) || (r.idNumber || "").includes(q) || String(r.id || "").slice(0, 8).toUpperCase().includes(q.trim().toUpperCase())) &&
+    (!nq || hit(r.fullName) || hit(r.phone) || hit(r.idNumber) || hit(String(r.id || "").slice(0, 8)) ||
+      (regRider(r) && (hit(regRider(r).companyId) || hit("olive-" + regRider(r).companyId) || hit(regRider(r).company + "-" + regRider(r).companyId) || hit(regRider(r).name)))) &&
     (statusF === "all" || regStatus(r) === statusF) &&
     (assigneeF === "all" || r.assignee === assigneeF) &&
     (areaF === "all" || (r.wilaya || r.area || "").trim() === areaF) &&
