@@ -6733,7 +6733,7 @@ function RegistrationForm({ onToggleLang, lockedCompany }) {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
   const [areas, setAreas] = useState([]);
-  useEffect(() => { supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => { const st = (data && data.data) || {}; const ar = Array.from(new Set([...(st.areas || []), ...((st.riders || []).map((r) => r.area).filter(Boolean))])).sort(); if (ar.length) setAreas(ar); }).catch(() => {}); }, []);
+  useEffect(() => { supabase.rpc("get_zone_areas").then(({ data }) => { const st = data || {}; const ar = Array.from(new Set([...(st.areas || []), ...(st.riderAreas || [])])).sort(); if (ar.length) setAreas(ar); }).catch(() => {}); }, []);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = () => {
     if (!f.fullName.trim() || !f.phone.trim()) return setErr(t("الاسم ورقم الهاتف مطلوبان", "Name and phone are required"));
@@ -6875,8 +6875,8 @@ export default function App() {
     if (!rider) return;
     // جلب إعداد نافذة التحويل من app_state (إعداد عام لا ترجّعه rider_login)
     if (rider.codWindow === undefined) {
-      supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
-        const st = (data && data.data) || {};
+      supabase.rpc("get_rider_settings").then(({ data }) => {
+        const st = data || {};
         const cw = st.codWindow || { enabled: false };
         setRider((cur) => (cur ? { ...cur, codWindow: cw, codDeductions: st.codDeductions || [], codAdjustments: st.codAdjustments || [], payNowOnly: st.payNowOnly, balanceMode: st.balanceMode, balanceIds: st.balanceIds, payPauses: st.payPauses || [] } : cur));
       }).catch(() => { setRider((cur) => (cur ? { ...cur, codWindow: { enabled: false } } : cur)); });
@@ -6886,8 +6886,8 @@ export default function App() {
         if (data) setRider((cur) => (cur ? { view: normalizeDB(data), creds: cur.creds, codWindow: cur.codWindow, codDeductions: cur.codDeductions, codAdjustments: cur.codAdjustments, payNowOnly: cur.payNowOnly, balanceMode: cur.balanceMode, balanceIds: cur.balanceIds, payPauses: cur.payPauses } : cur));
       });
       // حدّث إعداد النافذة والخصومات دورياً أيضاً
-      supabase.from("app_state").select("data").eq("id", APP_ROW_ID).single().then(({ data }) => {
-        if (data && data.data) setRider((cur) => (cur ? { ...cur, codWindow: data.data.codWindow || { enabled: false }, codDeductions: data.data.codDeductions || [], codAdjustments: data.data.codAdjustments || [], payNowOnly: data.data.payNowOnly, balanceMode: data.data.balanceMode, balanceIds: data.data.balanceIds, payPauses: data.data.payPauses || [] } : cur));
+      supabase.rpc("get_rider_settings").then(({ data }) => {
+        if (data) setRider((cur) => (cur ? { ...cur, codWindow: data.codWindow || { enabled: false }, codDeductions: data.codDeductions || [], codAdjustments: data.codAdjustments || [], payNowOnly: data.payNowOnly, balanceMode: data.balanceMode, balanceIds: data.balanceIds, payPauses: data.payPauses || [] } : cur));
       });
     }, 30000);
     return () => clearInterval(id);
