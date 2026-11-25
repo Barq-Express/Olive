@@ -586,6 +586,9 @@ const saveDB = async (next, at) => {
   return { error: lastErr };
 };
 
+// اسم عشوائي لملفات الإيصالات (ما يحتوي رقم المندوب أو الوقت، فما يقدر أحد يخمّنه)
+const receiptId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12));
+
 function resizeImage(file, max = 900) {
   return new Promise((res) => {
     const rd = new FileReader();
@@ -1715,8 +1718,8 @@ function TransfersTab({ company, db, save, user, onRefresh }) {
       if (!isPdf && !isImg) { setFinErr(t("الملف يجب صورة أو PDF", "File must be image or PDF")); return; }
       if (f.size > 15 * 1024 * 1024) { setFinErr(t("حجم الملف كبير (حد 15MB)", "File too large (15MB)")); return; }
       setFinUp(true);
-      const path = "fin-" + Date.now() + "-" + i + "-" + Math.random().toString(36).slice(2, 6) + "." + (isPdf ? "pdf" : "jpg");
-      supabase.storage.from("receipts").upload(path, f, { contentType: f.type, upsert: true }).then(({ error }) => {
+      const path = "fin-" + receiptId() + "." + (isPdf ? "pdf" : "jpg");
+      supabase.storage.from("receipts").upload(path, f, { contentType: f.type, upsert: false }).then(({ error }) => {
         setFinUp(false);
         if (error) { setFinErr(t("تعذّر رفع الإيصال", "Upload failed")); return; }
         const { data } = supabase.storage.from("receipts").getPublicUrl(path);
@@ -3526,10 +3529,10 @@ function RiderPortal({ db, riderId, creds, refresh }) {
   const [upErr, setUpErr] = useState("");
   const dataURLtoBlob = (dataURL) => { const [head, b64] = dataURL.split(","); const mime = (head.match(/:(.*?);/) || [])[1] || "image/jpeg"; const bin = atob(b64); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return new Blob([arr], { type: mime }); };
   const uploadToStorage = async (blob, ext, contentType) => {
-    const path = "r" + String(creds.phone || "x").replace(/\D/g, "") + "-" + Date.now() + "." + ext;
+    const path = "r-" + receiptId() + "." + ext;
     let lastErr = null;
     for (let attempt = 0; attempt < 3; attempt++) { // إعادة المحاولة 3 مرات عند فشل الشبكة
-      const { error } = await supabase.storage.from("receipts").upload(path, blob, { contentType, upsert: true });
+      const { error } = await supabase.storage.from("receipts").upload(path, blob, { contentType, upsert: false });
       if (!error) { const { data } = supabase.storage.from("receipts").getPublicUrl(path); return (data && data.publicUrl) || ""; }
       lastErr = error; await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     }
