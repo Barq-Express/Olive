@@ -1498,8 +1498,10 @@ function OrdersTab({ company, db, save, user }) {
   const inRange = (dt) => (!hFrom || dt >= hFrom) && (!hTo || dt <= hTo);
   const histRows = ims.filter((im) => inRange(im.date || "")).map((im) => {
     const res = (im.results || []).filter((r) => (hRider === "all" || r.riderId === hRider) && typeMatch(r.riderId) && areaMatch(r.riderId));
-    return { date: im.date, orders: res.reduce((a, r) => a + (r.orders || 0), 0), cod: res.reduce((a, r) => a + (r.cod || 0), 0), due: res.reduce((a, r) => a + (r.transferDue || 0), 0), hours: res.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0) };
+    const workedIds = Array.from(new Set(res.filter((r) => (r.orders || 0) > 0 || (r.cod || 0) > 0 || (Number(r.hours) || 0) > 0).map((r) => r.riderId)));
+    return { date: im.date, riderIds: workedIds, orders: res.reduce((a, r) => a + (r.orders || 0), 0), cod: res.reduce((a, r) => a + (r.cod || 0), 0), due: res.reduce((a, r) => a + (r.transferDue || 0), 0), hours: res.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0) };
   }).filter((x) => x.orders > 0 || x.cod > 0 || x.hours > 0 || (hRider === "all" && hType === "all")).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const hRidersTotal = new Set(histRows.flatMap((x) => x.riderIds)).size;
   const hTotals = histRows.reduce((a, x) => ({ orders: a.orders + x.orders, cod: a.cod + x.cod, due: a.due + x.due, hours: a.hours + x.hours }), { orders: 0, cod: 0, due: 0, hours: 0 });
   const setRow = (i, which, v) => setEditImp((e) => ({ ...e, results: e.results.map((r, idx) => (idx === i ? { ...r, [which]: v } : r)) }));
   const saveImport = () => {
@@ -1541,16 +1543,16 @@ function OrdersTab({ company, db, save, user }) {
         </div>
 
         <div className="flex justify-end mb-2">
-          <Btn kind="ghost" size="sm" onClick={() => exportExcel(histRows.map((x) => ({ التاريخ: x.date, الطلبات: x.orders, ساعات_العمل: Math.round(x.hours * 100) / 100, COD: x.cod, المطلوب_تحويله: x.due })), "History_" + company + (hRider !== "all" ? "_" + (companyRiders.find((r) => r.id === hRider)?.name || "") : ""))}><Download size={14} /> Excel</Btn>
+          <Btn kind="ghost" size="sm" onClick={() => exportExcel(histRows.map((x) => ({ التاريخ: x.date, الطلبات: x.orders, المناديب: x.riderIds.length, ساعات_العمل: Math.round(x.hours * 100) / 100, COD: x.cod, المطلوب_تحويله: x.due })), "History_" + company + (hRider !== "all" ? "_" + (companyRiders.find((r) => r.id === hRider)?.name || "") : ""))}><Download size={14} /> Excel</Btn>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
-            <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("التاريخ", "Date"), t("الطلبات", "Orders"), t("ساعات العمل", "Work Hours"), "COD", t("المطلوب تحويله", "To Transfer")].map((h) => <th key={h} className="py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
+            <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">{[t("التاريخ", "Date"), t("الطلبات", "Orders"), t("المناديب", "Riders"), t("ساعات العمل", "Work Hours"), "COD", t("المطلوب تحويله", "To Transfer")].map((h) => <th key={h} className="py-2.5 px-3 font-semibold">{h}</th>)}</tr></thead>
             <tbody>
-              {histRows.length === 0 ? <tr><td colSpan={5} className="text-center text-slate-400 py-6">{t("لا توجد بيانات في هذه المدة", "No data in this range")}</td></tr>
-                : histRows.map((x, i) => <tr key={i} className="border-b border-slate-50"><td className="px-3 py-2 font-semibold" dir="ltr">{x.date}</td><td className="px-3">{x.orders}</td><td className="px-3" style={{ color: "#7c3aed" }}>{Math.round(x.hours * 100) / 100}</td><td className="px-3">{omr(x.cod)}</td><td className="px-3">{omr(x.due)}</td></tr>)}
+              {histRows.length === 0 ? <tr><td colSpan={6} className="text-center text-slate-400 py-6">{t("لا توجد بيانات في هذه المدة", "No data in this range")}</td></tr>
+                : histRows.map((x, i) => <tr key={i} className="border-b border-slate-50"><td className="px-3 py-2 font-semibold" dir="ltr">{x.date}</td><td className="px-3">{x.orders}</td><td className="px-3">{x.riderIds.length}</td><td className="px-3" style={{ color: "#7c3aed" }}>{Math.round(x.hours * 100) / 100}</td><td className="px-3">{omr(x.cod)}</td><td className="px-3">{omr(x.due)}</td></tr>)}
             </tbody>
-            {histRows.length > 0 && <tfoot><tr className="font-bold bg-slate-50"><td className="px-3 py-2">{t("الإجمالي", "Total")}</td><td className="px-3">{hTotals.orders}</td><td className="px-3" style={{ color: "#7c3aed" }}>{Math.round(hTotals.hours * 10) / 10}</td><td className="px-3">{omr(hTotals.cod)}</td><td className="px-3">{omr(hTotals.due)}</td></tr></tfoot>}
+            {histRows.length > 0 && <tfoot><tr className="font-bold bg-slate-50"><td className="px-3 py-2">{t("الإجمالي", "Total")}</td><td className="px-3">{hTotals.orders}</td><td className="px-3" title={t("عدد المناديب المختلفين في المدة", "Unique riders in range")}>{hRidersTotal}</td><td className="px-3" style={{ color: "#7c3aed" }}>{Math.round(hTotals.hours * 10) / 10}</td><td className="px-3">{omr(hTotals.cod)}</td><td className="px-3">{omr(hTotals.due)}</td></tr></tfoot>}
           </table>
         </div>
       </Card>
