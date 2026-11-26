@@ -2468,7 +2468,8 @@ function AttendanceTab({ company, db, save }) {
   };
   const base = db.riders.filter((r) => r.company === company);
   // الغياب = اللي عليه شفت في هذا اليوم ولم يداوم. اللي ما عليه شفت ذاك اليوم ما يُحسب غايب
-  const schedOn = (r) => (r.shiftDays || []).includes(DAY_CODES[new Date(date + "T12:00:00+04:00").getDay()]);
+  // الفريلانسر النشط: مفروض يشتغل كل يوم، فإذا ما سجّل حضور يحسب غايب (ما عنده شفتات محددة)
+  const schedOn = (r) => (r.type === "Freelancer" ? r.status === "Active" : (r.shiftDays || []).includes(DAY_CODES[new Date(date + "T12:00:00+04:00").getDay()]));
   const rows = base.map((r) => ({ ...r, present: presentOn(r.id) })).filter((r) => (
     (r.name.includes(q) || (r.phone || "").includes(q) || (r.companyId || "").includes(q)) &&
     (typeF === "all" || r.type === typeF) &&
