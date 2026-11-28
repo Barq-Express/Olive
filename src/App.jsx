@@ -1694,7 +1694,7 @@ function OrdersTab({ company, db, save, user }) {
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="p-2 border-b border-slate-100"><input className={inputCls} placeholder={t("ابحث في مناديب الشيت (ID / اسم / هاتف)", "Search sheet riders (ID / name / phone)")} value={sheetQ} onChange={(e) => setSheetQ(e.target.value)} /></div>
               <div className="max-h-80 overflow-auto"><table className="w-full text-xs">
-                <thead><tr className="text-right text-slate-400 border-b border-slate-100">{[tr("المندوب"), tr("عدد الطلبات"), tr("مبلغ COD"), t("ساعات", "Hours"), t("قبول %", "Accept %")].map((h) => <th key={h} className="py-1.5 px-2 font-semibold">{h}</th>)}</tr></thead>
+                <thead><tr className="text-right text-slate-400 border-b border-slate-100">{[tr("المندوب"), tr("عدد الطلبات"), tr("مبلغ COD"), t("ساعات", "Hours"), t("قبول %", "Accept %"), ""].map((h, hi) => <th key={hi} className="py-1.5 px-2 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>
                   {editImp.results.map((r, i) => ({ r, i })).filter(({ r }) => { const q = sheetQ.trim().toLowerCase(); if (!q) return true; const rr = db.riders.find((x) => x.id === r.riderId) || {}; return [r.name, rr.companyId, rr.phone].some((v) => String(v || "").toLowerCase().includes(q)); }).map(({ r, i }) => (
                     <tr key={i} className="border-b border-slate-50">
@@ -1714,6 +1714,7 @@ function OrdersTab({ company, db, save, user }) {
                       <td className="px-2"><input type="number" step="0.001" className="w-24 rounded border border-slate-200 px-2 py-1" value={r.cod} onChange={(e) => setRow(i, "cod", e.target.value)} /></td>
                       <td className="px-2"><input type="number" step="0.5" className="w-16 rounded border border-slate-200 px-2 py-1" value={r.hours || ""} onChange={(e) => setRow(i, "hours", e.target.value)} /></td>
                       <td className="px-2"><input type="number" step="1" className="w-16 rounded border border-slate-200 px-2 py-1" value={r.accept || ""} onChange={(e) => setRow(i, "accept", e.target.value)} /></td>
+                      <td className="px-2"><button type="button" title={t("حذف هذا الصف من الشيت", "Remove this row")} onClick={() => { if (window.confirm(t("تحذف هذا الصف من الشيت؟", "Remove this row from the sheet?"))) setEditImp((e) => ({ ...e, results: e.results.filter((_, idx) => idx !== i) })); }} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
