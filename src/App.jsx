@@ -1252,6 +1252,27 @@ function Riders({ db, save, company, user }) {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetWord, setResetWord] = useState("");
   const [rpage, setRpage] = useState(1); const RPER = 50;
+  // اختيار مناديب ونقلهم لشركة أخرى (للإدارة فقط، من صفحة كل الشركات)
+  const [picked, setPicked] = useState([]); const [moveCo, setMoveCo] = useState("");
+  const showPick = !!isAdmin && !company;
+  const pageRows = list.slice((rpage - 1) * RPER, rpage * RPER);
+  const pageAllPicked = pageRows.length > 0 && pageRows.every((r) => picked.includes(r.id));
+  const togglePick = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const togglePageAll = () => setPicked((p) => (pageAllPicked ? p.filter((id) => !pageRows.some((r) => r.id === id)) : Array.from(new Set([...p, ...pageRows.map((r) => r.id)]))));
+  const moveTargets = Array.from(new Set([...COMPANIES, ...Object.keys(REG_LINK_FOR), ...db.riders.map((r) => r.company)])).filter(Boolean);
+  const moveToCompany = () => {
+    if (!moveCo || picked.length === 0) return;
+    const targetIds = new Set(db.riders.filter((r) => r.company === moveCo).map((r) => String(r.companyId || "").trim()).filter(Boolean));
+    const sel = db.riders.filter((r) => picked.includes(r.id));
+    const clash = sel.filter((r) => r.companyId && targetIds.has(String(r.companyId).trim()));
+    const clashIds = new Set(clash.map((r) => r.id));
+    const okIds = new Set(sel.filter((r) => !clashIds.has(r.id)).map((r) => r.id));
+    if (okIds.size === 0) return alert(t("ما فيه مندوب يقدر ينقل (ID مكرر عند الشركة الجديدة)", "No rider can be moved (duplicate ID in the target company)"));
+    const msg = t("نقل " + okIds.size + " مندوب إلى " + cLabel(moveCo) + "؟", "Move " + okIds.size + " rider(s) to " + cLabel(moveCo) + "?") + (clash.length ? "\n\n" + t("ما بينقلون لأن الـ ID مكرر عند الشركة الجديدة: ", "Not moved (duplicate ID in target): ") + clash.map((r) => r.name).join("، ") : "");
+    if (!window.confirm(msg)) return;
+    save({ ...db, riders: db.riders.map((r) => (okIds.has(r.id) ? { ...r, company: moveCo } : r)) });
+    setPicked([]); setMoveCo("");
+  };
   const archiveRider = (r) => {
     if (!window.confirm(tr("نقل هذا المندوب إلى الأرشيف؟"))) return;
     save({ ...db, riders: db.riders.filter((x) => x.id !== r.id), archive: [...(db.archive || []), { ...r, archivedAt: todayStr() }] });
@@ -1341,9 +1362,19 @@ function Riders({ db, save, company, user }) {
           <Btn onClick={() => setEditing(blank)}><Plus size={16} /> {tr("إضافة مندوب")}</Btn>
         </div>
       </div>
+      {showPick && picked.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-2 p-3 rounded-lg" style={{ background: "#eef2ff" }}>
+          <b className="text-sm">{t("مختار:", "Selected:")} {picked.length}</b>
+          <span className="text-sm">{t("انقلهم إلى:", "Move them to:")}</span>
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={moveCo} onChange={(e) => setMoveCo(e.target.value)}><option value="">{t("— اختر الشركة —", "— select company —")}</option>{moveTargets.map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select>
+          <Btn kind="dark" size="sm" onClick={moveToCompany}>{t("نقل المختارين", "Move selected")}</Btn>
+          <Btn kind="ghost" size="sm" onClick={() => setPicked([])}>{t("إلغاء الاختيار", "Clear")}</Btn>
+        </div>
+      )}
       <Card className="overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm whitespace-nowrap">
           <thead><tr className="text-start text-slate-500 text-xs bg-slate-50 border-b border-slate-200">
+            {showPick && <th className="py-3 px-3"><input type="checkbox" checked={pageAllPicked} onChange={togglePageAll} /></th>}
             {[tr("المندوب"), "ID", tr("الهاتف"), tr("المدني"), tr("المنطقة"), tr("الشركة"), tr("النوع"), tr("الحالة"), tr("آخر عمل"), ""].map((h) => <th key={h} className="py-3 px-3 font-semibold">{h}</th>)}
           </tr></thead>
           <tbody>
@@ -1351,6 +1382,7 @@ function Riders({ db, save, company, user }) {
               const red = r.status === "Active" && daysSince(r.lastWorked) >= NO_WORK_DAYS;
               return (
                 <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50">
+                  {showPick && <td className="px-3"><input type="checkbox" checked={picked.includes(r.id)} onChange={() => togglePick(r.id)} /></td>}
                   <td className="py-3 px-3 font-semibold text-slate-800" style={red ? { color: "#c0341d" } : {}}>{r.name}{red && " 🔴"}</td>
                   <td className="px-3 text-slate-500" dir="ltr">{r.companyId || "—"}</td>
                   <td className="px-3 text-slate-600" dir="ltr">{PERM_NOW.phone === false ? "—" : r.phone}</td>
@@ -1369,7 +1401,7 @@ function Riders({ db, save, company, user }) {
                 </tr>
               );
             })}
-            {list.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-slate-400">{tr("لا يوجد مناديب")}</td></tr>}
+            {list.length === 0 && <tr><td colSpan={showPick ? 11 : 10} className="py-8 text-center text-slate-400">{tr("لا يوجد مناديب")}</td></tr>}
           </tbody>
         </table>
         {list.length > RPER && (
