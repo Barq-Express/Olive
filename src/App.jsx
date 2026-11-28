@@ -551,6 +551,7 @@ function normalizeDB(db) {
     codDeductions: db.codDeductions || [], // خصومات COD من الراتب (نظام شهري)
     payNowOnly: db.payNowOnly,
     shiftCalls: db.shiftCalls || [],         // سجل مكالمات الشفتات (اليوم/القادمة)
+    zoneCommissions: db.zoneCommissions || {}, // عمولة الفريلانسر لكل منطقة (ريال عماني للطلب)
     payPauses: db.payPauses || [],           // فترات إيقاف الدفع (ممنوع رفع إيصالات فيها، الحالات ما تتغير)
     balanceMode: db.balanceMode || "off",   // إظهار رصيد COD الشهري للمندوب: off/all/selected
     balanceIds: db.balanceIds || [],
@@ -710,6 +711,15 @@ function makeAgentPicker(db, company) {
   db.riders.filter((r) => r.company === company && counts[r.codAgent] !== undefined).forEach((r) => counts[r.codAgent]++);
   return () => { if (!agents.length) return ""; const a = agents.reduce((b, x) => (counts[x] < counts[b] ? x : b), agents[0]); counts[a]++; return a; };
 }
+// عمولة الفريلانسر للطلب: كومشن المندوب الخاص أولاً، ثم عمولة منطقته، ثم الافتراضي حسب الشركة
+const DEF_RATE = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 };
+const freelancerRate = (db, rider) => {
+  const own = Number(rider.commission);
+  if (own > 0) return own;
+  const z = Number((db.zoneCommissions || {})[String(rider.area || "").trim()]);
+  if (z > 0) return z;
+  return DEF_RATE[rider.company] || 0;
+};
 const _moneyCache = new WeakMap();
 function riderMoney(db, riderId) {
   // تخزين مؤقت: تُحسب مرة واحدة لكل نسخة بيانات (تسريع كبير عند الكتابة/البحث)
@@ -738,8 +748,7 @@ function _computeRiderMoney(db, riderId) {
   let earn = 0;
   if (rider) {
     if (rider.type === "Freelancer") {
-      const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 };
-      const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0);
+      const rate = freelancerRate(db, rider);
       earn = orders * rate;
     } else {
       earn = ftEarn(db, rider, hoursCapped); // راتب الفول تايم حسب القواعد المضبوطة
@@ -1224,7 +1233,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
 }
 
 function Riders({ db, save, company, user }) {
-  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all"); const [statusF, setStatusF] = useState("all");
+  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all"); const [comf, setComf] = useState("all"); const [statusF, setStatusF] = useState("all");
   const [editing, setEditing] = useState(null); const [bulk, setBulk] = useState(false);
   const scoped = db.riders.filter((r) => (!company || r.company === company));
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
@@ -1237,6 +1246,7 @@ function Riders({ db, save, company, user }) {
     (natf === "all" || natClass(r.nationality) === natf) &&
     (vehf === "all" || (r.vehicleType || "") === vehf) &&
     (typef === "all" || r.type === typef) &&
+    (comf === "all" || (r.type === "Freelancer" && !(Number(r.commission) > 0))) &&
     (statusF === "all" || (r.status || "") === statusF) &&
     (r.name.includes(q) || r.phone.includes(q) || (r.companyId || "").includes(q) || (r.civil || "").includes(q) || (r.area || "").includes(q)));
   const isAdmin = user && (user.role === "Admin" || user.role === "Operations Manager");
@@ -1323,6 +1333,7 @@ function Riders({ db, save, company, user }) {
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={af} onChange={(e) => setAf(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={natf} onChange={(e) => setNatf(e.target.value)}><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عمانيين", "Omani")}</option><option value="foreign">{t("أجانب", "Foreign")}</option><option value="unknown">{t("غير محدد", "Unspecified")}</option></select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={vehf} onChange={(e) => setVehf(e.target.value)}><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سيارة", "Car")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
+          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={comf} onChange={(e) => setComf(e.target.value)}><option value="all">{t("كل الكومشن", "All commissions")}</option><option value="none">{t("فريلانسر بدون كومشن", "Freelancers without commission")}</option></select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={typef} onChange={(e) => setTypef(e.target.value)}><option value="all">{t("كل الأنواع", "All types")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option></select>
         </div>
         <div className="flex gap-2">
@@ -2583,7 +2594,7 @@ function ReportsScoped({ db, company }) {
     // نفس حساب جدول مستحقات COD، ومقسّم حسب نوع المندوب في كل يوم
     const pm = riderMoneyRange(db, rid, pFrom, pTo, pType);
     let dues = 0;
-    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); dues = pm.orders * rate; } }
+    if (rider) { if (rider.type === "Freelancer") { const rate = freelancerRate(db, rider); dues = pm.orders * rate; } }
     return { orders: pm.orders, cod: pm.codToTransfer, dues };
   };
   const rows = useMemo(() => {
@@ -3050,7 +3061,7 @@ function MonthlyTab({ company, db }) {
     const avgAccept = accDays.length ? Math.round(accDays.reduce((s, x) => s + x.accept, 0) / accDays.length) : 0;
     const rider = db.riders.find((r) => r.id === rid);
     let earn = 0;
-    if (rider) { if (rider.type === "Freelancer") { const defRate = { Snoonu: 1.4, Aramex: 0.7, Talabat: 0 }; const rate = Number(rider.commission) > 0 ? Number(rider.commission) : (defRate[rider.company] || 0); earn = orders * rate; } else { earn = ftEarn(db, rider, hoursCapped); } }
+    if (rider) { if (rider.type === "Freelancer") { const rate = freelancerRate(db, rider); earn = orders * rate; } else { earn = ftEarn(db, rider, hoursCapped); } }
     return { orders, cod, hoursRaw, hoursCapped, avgAccept, earn, days: rows.length };
   };
 
@@ -3388,6 +3399,43 @@ function HREmpPortal({ data, creds, onRefresh, onLogout }) {
 const PAY_PER_SHEET_START = "2026-10-01"; // نظام الدفع لكل شيت يبدأ من هذا التاريخ
 const PAY_NOW_ONLY = true;  // true = المندوب لازم يضغط «ادفع الآن» | false = يرفع الإيصال بحرية
 const NEW_SYSTEM_START = "2026-10"; // النظام الجديد (الرصيد الرئيسي) يبدأ من أكتوبر — ما قبله يُسدّد عبر المالية
+function ZoneCommissionCard({ db, save }) {
+  // المبدئي: القيم المحفوظة، وإذا ما فيه شي محفوظ نعرض القيم الحالية كبداية
+  const [vals, setVals] = useState(() => (Object.keys(db.zoneCommissions || {}).length ? { ...db.zoneCommissions } : { ...ZONE_COMMISSION }));
+  const [newArea, setNewArea] = useState("");
+  const areaList = Array.from(new Set([
+    ...db.riders.map((r) => String(r.area || "").trim()),
+    ...(db.registrations || []).map((r) => String(r.wilaya || "").trim()),
+    ...Object.keys(vals),
+  ].filter(Boolean))).sort();
+  const addArea = () => { const a = newArea.trim(); if (!a) return; setVals((v) => ({ ...v, [a]: v[a] ?? "" })); setNewArea(""); };
+  const saveAll = () => {
+    const clean = {};
+    Object.entries(vals).forEach(([a, v]) => { const n = Number(v); if (a && n > 0) clean[a] = n; });
+    save({ ...db, zoneCommissions: clean });
+    alert(t("تم حفظ عمولة المناطق", "Zone commissions saved"));
+  };
+  return (
+    <div className="border-t border-slate-100 pt-4 mt-4">
+      <h4 className="font-bold text-slate-800 mb-1">{t("عمولة المناطق (الفريلانسر)", "Zone commission (Freelancers)")}</h4>
+      <p className="text-xs text-slate-500 mb-3">{t("العمولة للطلب حسب المنطقة. المندوب اللي ما له كومشن خاص يأخذ عمولة منطقته تلقائياً، حتى لو سجّل من التسجيل. الكومشن الخاص بالمندوب له الأولوية.", "Per-order commission by area. Riders without their own commission get their area's rate automatically, including those registered via the form. A rider's own commission takes priority.")}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+        {areaList.map((a) => (
+          <div key={a} className="flex items-center gap-2">
+            <span className="text-sm text-slate-700 flex-1">{a}</span>
+            <input type="number" step="0.001" min="0" dir="ltr" className={inputCls + " w-28"} value={vals[a] ?? ""} onChange={(e) => setVals({ ...vals, [a]: e.target.value })} />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 flex-wrap items-center mb-3">
+        <input className={inputCls + " w-48"} placeholder={t("منطقة جديدة", "New area")} value={newArea} onChange={(e) => setNewArea(e.target.value)} />
+        <Btn kind="ghost" size="sm" onClick={addArea}>{t("إضافة منطقة", "Add area")}</Btn>
+      </div>
+      <Btn kind="dark" onClick={saveAll}>{t("حفظ العمولات", "Save commissions")}</Btn>
+    </div>
+  );
+}
+
 function PayPauseCard({ db, save, by }) {
   const [pFrom, setPFrom] = useState("");
   const [pTo, setPTo] = useState("");
@@ -6295,6 +6343,18 @@ const INTAKE_DOCS = [
 
 // العمولة لكل منطقة (ريال عماني) — تظهر للمندوب وفي رسالة الرابط
 const ZONE_COMMISSION = { "Muscat / Seeb": 1.1, "Muscat / Bosher": 1.1, Salalah: 1.1, Sohar: 1.3, Liwa: 1.3, Saham: 1.3, Nizwa: 1.4 };
+// عمولة المناطق من قاعدة البيانات (الإعدادات). إذا ما فيه شي محفوظ نرجع للقيم الثابتة
+function useZoneComm() {
+  const [m, setM] = useState(() => { const o = {}; Object.entries(ZONE_COMMISSION).forEach(([k, v]) => { o[ftCanon(k)] = v; }); return o; });
+  useEffect(() => {
+    supabase.rpc("get_zone_areas").then(({ data }) => {
+      const z = (data && data.zoneCommissions) || {};
+      const o = {}; Object.entries(z).forEach(([k, v]) => { const n = Number(v); if (n > 0) o[ftCanon(k)] = n; });
+      if (Object.keys(o).length) setM(o);
+    }).catch(() => {});
+  }, []);
+  return m;
+}
 // رقم الموظف المختص لكل منطقة — يظهر في صفحة التسجيل فقط (مو في الرسالة)
 // مجموعات المناطق: رابط واحد للمجموعة، والمندوب يختار المنطقة اللي يبيها داخل الفورم
 const INTAKE_GROUPS = [
@@ -6305,6 +6365,7 @@ const ZONE_CONTACT = { "Salalah": "+96872454417", "Nizwa": "+96872454417", "Musc
 const REG_ZONES = ["Muscat", "Muscat / Seeb", "Muscat / Bosher", "Sohar", "Saham", "Liwa", "Salalah", "Nizwa"];
 let PERM_NOW = {}; // صلاحيات المستخدم الحالي (تُحدَّث عند كل عرض)
 function IntakeForm({ token, onToggleLang }) {
+  const zoneComm = useZoneComm();
   const [zone, setZone] = useState("");
   const [zoneOpts, setZoneOpts] = useState([]);
   const [android, setAndroid] = useState(false);
@@ -6402,7 +6463,7 @@ function IntakeForm({ token, onToggleLang }) {
               <div>• {t("يشترط أن يكون الهاتف أندرويد.", "Your phone must be Android.")}</div>
               <div>• {t("هذا الدوام الجزئي فقط. أما للدوام بعقود فنرجو التواصل معنا.", "This is for part-time work only. For contract jobs, please contact us.")}</div>
               {ZONE_CONTACT[ftCanon(zone)] && <div>• {t("للتواصل مع الموظف المختص:", "Contact our staff:")} <span dir="ltr" className="inline-flex gap-3 flex-wrap align-middle"><a className="font-bold underline" href={"tel:" + ZONE_CONTACT[ftCanon(zone)]}>📞 {ZONE_CONTACT[ftCanon(zone)]}</a><a className="font-bold underline" target="_blank" rel="noopener noreferrer" href={"https://wa.me/" + ZONE_CONTACT[ftCanon(zone)].replace("+", "")}>💬 {t("واتساب", "WhatsApp")}</a></span></div>}
-              {ZONE_COMMISSION[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{ZONE_COMMISSION[ftCanon(zone)].toFixed(1)} {t("ريال عماني لكل طلب يتم توصيله بنجاح", "OMR per successfully delivered order")}</b></div>}
+              {zoneComm[ftCanon(zone)] !== undefined && <div>• {t("العمولة لمنطقتك: ", "Commission for your zone: ")}<b>{zoneComm[ftCanon(zone)].toFixed(1)} {t("ريال عماني لكل طلب يتم توصيله بنجاح", "OMR per successfully delivered order")}</b></div>}
               <label className="flex items-start gap-2 pt-1 cursor-pointer">
                 <input type="checkbox" className="mt-1" checked={android} onChange={(e) => setAndroid(e.target.checked)} />
                 <span>{t("أقر بأنني أمتلك أندرويد أو ساقوم بتوفيره خلال الأيام الثلاثة القادمة", "I confirm I have an Android phone or will get one within the next three days")} <span className="text-red-500">*</span></span>
@@ -6462,6 +6523,7 @@ function IntakeForm({ token, onToggleLang }) {
 
 // ===== الأدمن: إنشاء رابط تسجيل لمنطقة محددة =====
 function IntakeLinkMaker({ zones }) {
+  const zoneComm = useZoneComm();
   const [zone, setZone] = useState("");
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
@@ -6478,7 +6540,7 @@ function IntakeLinkMaker({ zones }) {
   // نص الرسالة للمناديب بالعربي (ثابت)
   // العمولة لكل منطقة (ريال عماني)
   const zoneCom = (() => {
-    const v = ZONE_COMMISSION[ftCanon(zone)];
+    const v = zoneComm[ftCanon(zone)];
     return v !== undefined ? v.toFixed(1) : "";
   })();
   const msg = link ? [
@@ -7126,6 +7188,7 @@ export default function App() {
               <p className="text-[11px] text-slate-400 mt-2">{t("الحالي:", "Current:")} {codWindowOpen(db.codWindow) ? <span style={{ color: "#0f9d58" }}>{t("مفتوحة الآن ✓", "Open now ✓")}</span> : <span style={{ color: "#c0341d" }}>{t("مغلقة الآن", "Closed now")}</span>}</p>
               <p className="text-[11px] text-amber-600 mt-1">{t("⚠️ لتفعيل المنع على الخادم أيضاً، شغّل ملف SQL المرفق مرة واحدة.", "⚠️ To enforce on the server too, run the attached SQL once.")}</p>
               <PayPauseCard db={db} save={save} by={(user && (user.name || user.email)) || ""} />
+              <ZoneCommissionCard db={db} save={save} />
               <div className="border-t border-slate-100 pt-4 mt-4">
                 <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><Upload size={16} /> {t("طريقة رفع المندوب للإيصالات", "Rider Receipt Upload Mode")}</h4>
                 <label className="flex items-center gap-2 text-sm cursor-pointer mt-2"><input type="checkbox" checked={db.payNowOnly !== undefined ? !!db.payNowOnly : PAY_NOW_ONLY} onChange={(e) => save({ ...db, payNowOnly: e.target.checked })} /> {t("إلزام الدفع عبر زر «ادفع الآن» فقط (منع الرفع الحر)", "Require payment via Pay Now only (block free upload)")}</label>
