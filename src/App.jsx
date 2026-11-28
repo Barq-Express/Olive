@@ -5520,6 +5520,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
   const [assigneeF, setAssigneeF] = useState("all");
   const [areaF, setAreaF] = useState("all");
   const [dateF, setDateF] = useState("");
+  const [companyF, setCompanyF] = useState("all");
   const [manageOpen, setManageOpen] = useState(false);
 
   const upd = (id, patch) => save({ ...db, registrations: regs.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
@@ -5583,9 +5584,11 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
   const [coSel, setCoSel] = useState({}); // الشركة اللي يتحوّل لها المندوب (لكل طلب)
   const convert = (r) => {
     if (!regStepsDone(r)) return;
+    // التحويل ما يصير إلا بعد إدخال الـ ID والباسوورد، والمندوب دائماً تحت سنونو
+    if (!r.driverId || !r.password) return alert(tr("أدخل الـ ID والباسوورد أولاً قبل التحويل"));
     const rider = {
       id: uid(), name: r.fullName, phone: r.phone, companyId: r.driverId || "", civil: r.idNumber || "", area: r.wilaya || "",
-      commission: "", company: coSel[r.id] || r.company || "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "",
+      commission: "", company: "Snoonu", type: "Freelancer", joinDate: todayStr(), contractDate: "",
       status: "Active", bank: r.bank || "", bankName: r.bankName || "", swift: r.swift || "", nationality: r.nationality || "", vehicleType: r.vehicleType || "",
       email: r.email || "", notes: r.notes || "", username: r.username || r.phone, password: r.password || "1234", lastWorked: null,
     };
@@ -5617,8 +5620,18 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
     (statusF === "all" || regStatus(r) === statusF) &&
     (assigneeF === "all" || r.assignee === assigneeF) &&
     (areaF === "all" || (r.wilaya || r.area || "").trim() === areaF) &&
-    (!dateF || r.createdAt === dateF)
+    (!dateF || r.createdAt === dateF) &&
+    (companyF === "all" || (r.company || "") === companyF)
   )).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  // نقل كل التسجيلات المفلترة (ومناديبها المحوّلين) إلى سنونو بضغطة وحدة
+  const moveFilteredToSnoonu = () => {
+    const toMove = rows.filter((r) => (r.company || "") !== "Snoonu");
+    if (toMove.length === 0) return alert(tr("ما فيه تسجيلات تحتاج نقل"));
+    const moveIds = new Set(toMove.map((r) => r.id));
+    const riderIds = new Set(toMove.filter((r) => r.convertedRiderId).map((r) => r.convertedRiderId));
+    if (!window.confirm(t("نقل " + toMove.length + " تسجيل إلى سنونو (ومناديبهم المحوّلين أيضاً)؟", "Move " + toMove.length + " registration(s) to Snoonu (and their converted riders)?"))) return;
+    save({ ...db, registrations: regs.map((x) => (moveIds.has(x.id) ? { ...x, company: "Snoonu" } : x)), riders: db.riders.map((x) => (riderIds.has(x.id) ? { ...x, company: "Snoonu" } : x)) });
+  };
 
   const StatCard = ({ label, value, color }) => (
     <div className="bg-white rounded-xl border border-slate-100 p-3">
@@ -5668,9 +5681,11 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
           <Field label={t("الموظف", "Assignee")}><select className={inputCls} value={assigneeF} onChange={(e) => setAssigneeF(e.target.value)}><option value="all">{t("الكل", "All")}</option>{agents.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
           <Field label={t("المنطقة", "Area")}><select className={inputCls} value={areaF} onChange={(e) => setAreaF(e.target.value)}><option value="all">{t("كل المناطق", "All areas")}</option>{regAreas.map((a) => <option key={a} value={a}>{a}</option>)}</select></Field>
           <Field label={t("تاريخ التسجيل", "Date")}><input type="date" className={inputCls} value={dateF} onChange={(e) => setDateF(e.target.value)} /></Field>
+          <Field label={t("الشركة", "Company")}><select className={inputCls} value={companyF} onChange={(e) => setCompanyF(e.target.value)}><option value="all">{t("الكل", "All")}</option>{Array.from(new Set(["Olive", "Snoonu", ...regs.map((r) => r.company).filter(Boolean)])).map((c) => <option key={c} value={c}>{cLabel(c)}</option>)}</select></Field>
           <div className="flex items-end gap-2">
+            {companyF !== "all" && companyF !== "Snoonu" && rows.length > 0 && <Btn kind="dark" onClick={moveFilteredToSnoonu}>{t("نقل المفلترين إلى سنونو", "Move filtered to Snoonu")} ({rows.length})</Btn>}
             <Btn kind="ghost" onClick={() => exportExcel(rows.map((r) => ({ المندوب: r.fullName, الهاتف: r.phone, البطاقة: r.idNumber || "", الجنسية: r.nationality || "", الولاية: r.wilaya || "", المركبة: r.vehicleType || "", رخصة: r.hasLicense ? tr("نعم") : tr("لا"), الشركة: r.company ? cLabel(r.company) : "", البنك: r.bankName || "", رقم_الحساب: r.bank || "", سويفت: r.swift || "", الموظف: agentName(r.assignee), الحالة: t(REG_STATUS_LABEL[regStatus(r)][0], REG_STATUS_LABEL[regStatus(r)][1]), التاريخ: r.createdAt })), "Registrations")}><Download size={15} /> Excel ({rows.length})</Btn>
-            {(q || statusF !== "all" || assigneeF !== "all" || areaF !== "all" || dateF) && <Btn kind="ghost" onClick={() => { setQ(""); setStatusF("all"); setAssigneeF("all"); setAreaF("all"); setDateF(""); }}>{t("مسح الفلاتر", "Clear")}</Btn>}
+            {(q || statusF !== "all" || assigneeF !== "all" || areaF !== "all" || dateF || companyF !== "all") && <Btn kind="ghost" onClick={() => { setQ(""); setStatusF("all"); setAssigneeF("all"); setAreaF("all"); setDateF(""); setCompanyF("all"); }}>{t("مسح الفلاتر", "Clear")}</Btn>}
           </div>
         </div>
         <div className="overflow-x-auto"><table className="w-full text-sm whitespace-nowrap">
@@ -5770,7 +5785,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
               </div>
               {r.converted
                 ? <div className="flex items-center gap-2 flex-wrap"><Pill color="#0f9d58">{t("تم التحويل إلى مندوب ✓", "Converted to driver ✓")}</Pill>{!readOnly && <button onClick={() => undoConvert(r)} className="text-xs font-semibold text-amber-700 underline">{t("تراجع عن التحويل", "Undo conversion")}</button>}</div>
-                : (!readOnly && !r.rejected && <span className="inline-flex items-center gap-2 flex-wrap"><select className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none" value={coSel[r.id] || r.company || "Snoonu"} onChange={(e) => setCoSel({ ...coSel, [r.id]: e.target.value })}>{["Snoonu", "Talabat", "Aramex", "Olive"].map((c) => <option key={c} value={c}>{c}</option>)}</select><Btn kind={regStepsDone(r) ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r)}><CheckCircle2 size={16} /> Convert to Driver</Btn></span>)}
+                : (!readOnly && !r.rejected && <span className="inline-flex items-center gap-2 flex-wrap"><Btn kind={regStepsDone(r) && r.driverId && r.password ? "success" : "ghost"} onClick={() => convert(r)} disabled={!regStepsDone(r) || !r.driverId || !r.password}><CheckCircle2 size={16} /> Convert to Driver</Btn></span>)}
             </div>
             {!r.converted && !regStepsDone(r) && <p className="text-xs text-slate-400 text-left">{t("أكمل جميع الخطوات لتفعيل التحويل.", "Complete all steps to enable conversion.")}</p>}
           </div>
