@@ -5445,6 +5445,30 @@ function TasksModule({ db, mode }) {
   );
 }
 
+// ملخص لكل شركة: كم مسجّل، وكم تحوّل لمندوب، وكم لسا ما تحوّل
+function RegCompanySummary({ regs }) {
+  const byCo = {};
+  Array.from(new Set([...COMPANIES, ...Object.keys(REG_LINK_FOR)])).forEach((c) => { byCo[c] = { total: 0, converted: 0, open: 0 }; });
+  regs.forEach((r) => {
+    const c = r.company || "—";
+    if (!byCo[c]) byCo[c] = { total: 0, converted: 0, open: 0 };
+    byCo[c].total++;
+    if (r.converted) byCo[c].converted++; else if (!r.rejected) byCo[c].open++;
+  });
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      {Object.entries(byCo).map(([c, s]) => (
+        <Card key={c} className="p-4">
+          <div className="text-sm font-bold text-slate-800 mb-1">{c === "—" ? t("بدون شركة", "No company") : cLabel(c)}</div>
+          <div className="text-xs text-slate-500">{t("مسجّلين", "Registered")}: <b>{s.total}</b></div>
+          <div className="text-xs" style={{ color: "#0f9d58" }}>{t("تحوّلوا لمناديب", "Converted to riders")}: <b>{s.converted}</b></div>
+          <div className="text-xs text-slate-500">{t("لسا ما تحوّلوا", "Not converted yet")}: <b>{s.open}</b></div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = false }) {
   // عرض فقط: أي كتابة تصير لا شي (كل التعديلات تمر من save)
   const save = readOnly ? () => {} : saveRaw;
@@ -5605,6 +5629,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
       </Card>
 
       <Card className="p-4">
+        <RegCompanySummary regs={regs} />
         <div className="grid md:grid-cols-5 gap-2 mb-4">
           <Field label={t("بحث", "Search")}><input className={inputCls} placeholder={t("اسم / هاتف / بطاقة / رقم الطلب", "name / phone / ID / request no.")} value={q} onChange={(e) => setQ(e.target.value)} /></Field>
           <Field label={t("الحالة", "Status")}><select className={inputCls} value={statusF} onChange={(e) => setStatusF(e.target.value)}><option value="all">{t("الكل", "All")}</option>{Object.keys(REG_STATUS_LABEL).map((k) => <option key={k} value={k}>{t(REG_STATUS_LABEL[k][0], REG_STATUS_LABEL[k][1])}</option>)}</select></Field>
