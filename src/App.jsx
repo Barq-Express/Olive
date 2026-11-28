@@ -1541,17 +1541,24 @@ function OrdersTab({ company, db, save, user }) {
   const inRange = (dt) => (!hFrom || dt >= hFrom) && (!hTo || dt <= hTo);
   const histRows = ims.filter((im) => inRange(im.date || "")).map((im) => {
     const res = (im.results || []).filter((r) => (hRider === "all" || r.riderId === hRider) && typeMatch(r.riderId) && areaMatch(r.riderId));
-    const workedIds = Array.from(new Set(res.filter((r) => (r.orders || 0) > 0 || (r.cod || 0) > 0 || (Number(r.hours) || 0) > 0).map((r) => r.riderId)));
+    // غير المسجلين (riderId فاضي) ينحسبون كل واحد باسمه، مو كخانة وحدة
+    const workedIds = Array.from(new Set(res.filter((r) => (r.orders || 0) > 0 || (r.cod || 0) > 0 || (Number(r.hours) || 0) > 0).map((r) => r.riderId || ("name:" + r.name))));
     return { date: im.date, riderIds: workedIds, orders: res.reduce((a, r) => a + (r.orders || 0), 0), cod: res.reduce((a, r) => a + (r.cod || 0), 0), due: res.reduce((a, r) => a + (r.transferDue || 0), 0), hours: res.reduce((a, r) => a + Math.min(Number(r.hours) || 0, HOURS_CAP), 0) };
   }).filter((x) => x.orders > 0 || x.cod > 0 || x.hours > 0 || (hRider === "all" && hType === "all")).sort((a, b) => (a.date < b.date ? 1 : -1));
   const hRidersTotal = new Set(histRows.flatMap((x) => x.riderIds)).size;
   const hTotals = histRows.reduce((a, x) => ({ orders: a.orders + x.orders, cod: a.cod + x.cod, due: a.due + x.due, hours: a.hours + x.hours }), { orders: 0, cod: 0, due: 0, hours: 0 });
   const setRow = (i, which, v) => setEditImp((e) => ({ ...e, results: e.results.map((r, idx) => (idx === i ? { ...r, [which]: v } : r)) }));
+  // ربط صف غير مسجل بمندوب مسجل (بدون ما نفقد أرقام الصف)
+  const linkRow = (i, rid) => {
+    const rr = db.riders.find((x) => x.id === rid);
+    if (!rr || !editImp || editImp.results.some((x, idx) => idx !== i && x.riderId === rr.id)) return;
+    setEditImp((e) => ({ ...e, results: e.results.map((r, idx) => (idx === i ? { ...r, riderId: rr.id, name: rr.name, matched: true } : r)) }));
+  };
   const saveImport = () => {
     const results = editImp.results.map((r) => {
       const orders = Number(r.orders) || 0; const cod = Number(r.cod) || 0; const hours = Number(r.hours) || 0; const accept = pctAccept(r.accept);
       const transferDue = company === "Talabat" ? (Number(r.transferDue) || cod) : cod;
-      return { ...r, orders, cod, hours, accept, transferDue };
+      return { ...r, orders, cod, hours, accept, transferDue, matched: !!r.riderId };
     });
     const worked = new Set(results.filter((r) => r.riderId && (r.orders > 0 || r.cod > 0)).map((r) => r.riderId));
     const notWorkedIds = db.riders.filter((r) => r.company === company && r.status === "Active" && !worked.has(r.id)).map((r) => r.id);
@@ -1691,7 +1698,18 @@ function OrdersTab({ company, db, save, user }) {
                 <tbody>
                   {editImp.results.map((r, i) => ({ r, i })).filter(({ r }) => { const q = sheetQ.trim().toLowerCase(); if (!q) return true; const rr = db.riders.find((x) => x.id === r.riderId) || {}; return [r.name, rr.companyId, rr.phone].some((v) => String(v || "").toLowerCase().includes(q)); }).map(({ r, i }) => (
                     <tr key={i} className="border-b border-slate-50">
-                      <td className="py-1.5 px-2 font-semibold">{r.name}</td>
+                      <td className="py-1.5 px-2 font-semibold">
+                        {r.name}
+                        {!r.riderId && (
+                          <div className="mt-1">
+                            <Pill color="#c0341d">{tr("غير مسجل")}</Pill>
+                            <select className="mt-1 block w-48 rounded border border-slate-200 px-2 py-1 text-xs font-normal" value="" onChange={(e) => linkRow(i, e.target.value)}>
+                              <option value="">{t("— اربط بمندوب مسجل —", "— link to registered rider —")}</option>
+                              {companyRiders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2"><input type="number" className="w-20 rounded border border-slate-200 px-2 py-1" value={r.orders} onChange={(e) => setRow(i, "orders", e.target.value)} /></td>
                       <td className="px-2"><input type="number" step="0.001" className="w-24 rounded border border-slate-200 px-2 py-1" value={r.cod} onChange={(e) => setRow(i, "cod", e.target.value)} /></td>
                       <td className="px-2"><input type="number" step="0.5" className="w-16 rounded border border-slate-200 px-2 py-1" value={r.hours || ""} onChange={(e) => setRow(i, "hours", e.target.value)} /></td>
