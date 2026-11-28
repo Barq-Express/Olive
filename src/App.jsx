@@ -5477,6 +5477,21 @@ function TasksModule({ db, mode }) {
   );
 }
 
+// حقل نص يحفظ محلياً أثناء الكتابة، ويرسل القيمة عند الخروج من الحقل (يمنع اختفاء الأرقام وتكرارها من التأخير بين الحفظ والكتابة)
+function DraftInput({ value, onCommit, ...rest }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => { setV(value || ""); }, [value]);
+  return (
+    <input
+      {...rest}
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => { if (v !== (value || "")) onCommit(v); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+    />
+  );
+}
+
 // ملخص لكل شركة: كم مسجّل، وكم تحوّل لمندوب، وكم لسا ما تحوّل
 function RegCompanySummary({ regs }) {
   const byCo = {};
@@ -5489,6 +5504,7 @@ function RegCompanySummary({ regs }) {
   });
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="col-span-2 md:col-span-4 text-[11px] text-slate-400">{"نسخة الواجهة: 2026-11-28 · حقول التسجيل تحفظ عند الخروج"}</div>
       {Object.entries(byCo).map(([c, s]) => (
         <Card key={c} className="p-4">
           <div className="text-sm font-bold text-slate-800 mb-1">{c === "—" ? t("بدون شركة", "No company") : cLabel(c)}</div>
@@ -5724,7 +5740,7 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
                 <div className="text-xs font-bold text-slate-600">{t("تعديل البيانات", "Edit details")}</div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {[["fullName", t("الاسم (إنجليزي كما في البطاقة)", "Name (English, as on Civil ID)"), "text"], ["phone", t("الهاتف", "Phone"), "text"], ["idNumber", t("البطاقة/الجواز", "ID/Passport"), "text"], ["email", t("البريد", "Email"), "text"], ["nationality", t("الجنسية", "Nationality"), "text"], ["wilaya", t("الولاية", "Wilaya"), "text"], ["plate", t("رقم اللوحة", "Plate"), "text"], ["civilExpiry", t("انتهاء البطاقة", "Civil ID expiry"), "date"], ["licenseExpiry", t("انتهاء الرخصة", "License expiry"), "date"]].map(([k, l, type]) => (
-                    <Field key={k} label={l}><input type={type} dir="ltr" className={inputCls} value={r[k] || ""} onChange={(e) => upd(r.id, { [k]: e.target.value })} /></Field>
+                    <Field key={k} label={l}><DraftInput type={type} dir="ltr" className={inputCls} value={r[k] || ""} onCommit={(val) => upd(r.id, { [k]: val })} /></Field>
                   ))}
                 </div>
                 {r.fullName && !/^[A-Za-z][A-Za-z .'-]*$/.test(r.fullName.trim()) && <div className="text-xs text-red-600">{t("الاسم لازم يكون إنجليزي كما في البطاقة", "Name must be in English as on the Civil ID")}</div>}
@@ -5767,11 +5783,11 @@ function RegistrationModule({ db, save: saveRaw, user, onRefresh, readOnly = fal
                   <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: r.needsFix ? "#d97706" : "#e2e8f0", color: "#fff" }}>{r.needsFix ? "!" : ""}</span>
                   <span className="text-sm font-semibold text-slate-800">{t("يحتاج تصحيح (الموظف يتواصل مع المندوب)", "Needs fix (staff contacts the rider)")}</span>
                 </button>
-                {r.needsFix && <Field label={t("وش المطلوب تصحيحه؟ (مثلاً صورة غير واضحة)", "What needs fixing? (e.g. unclear photo)")}><input className={inputCls} value={r.fixNote || ""} onChange={(e) => upd(r.id, { fixNote: e.target.value })} /></Field>}
+                {r.needsFix && <Field label={t("وش المطلوب تصحيحه؟ (مثلاً صورة غير واضحة)", "What needs fixing? (e.g. unclear photo)")}><DraftInput className={inputCls} value={r.fixNote || ""} onCommit={(val) => upd(r.id, { fixNote: val })} /></Field>}
               </div>
               <div className="grid md:grid-cols-3 gap-2 mt-3">
-                <Field label="Password"><input className={inputCls} dir="ltr" value={r.password || ""} onChange={(e) => upd(r.id, { password: e.target.value })} /></Field>
-                <Field label="Driver ID"><input className={inputCls} dir="ltr" value={r.driverId || ""} onChange={(e) => upd(r.id, { driverId: e.target.value })} /></Field>
+                <Field label="Password"><DraftInput className={inputCls} dir="ltr" value={r.password || ""} onCommit={(val) => upd(r.id, { password: val })} /></Field>
+                <Field label="Driver ID"><DraftInput className={inputCls} dir="ltr" value={r.driverId || ""} onCommit={(val) => upd(r.id, { driverId: val })} /></Field>
               </div>
             </div>
 
