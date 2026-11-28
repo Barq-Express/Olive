@@ -1517,6 +1517,8 @@ function OrdersTab({ company, db, save, user }) {
   };
   const [editImp, setEditImp] = useState(null);
   const [addImpRider, setAddImpRider] = useState(""); // إضافة مندوب لشيت موجود (بدون حذف الشيت)
+  const [addImpQ, setAddImpQ] = useState(""); // بحث بالـ ID / الاسم / الهاتف داخل قائمة المناديب
+  const [sheetQ, setSheetQ] = useState(""); // بحث داخل مناديب الشيت الموجودين (لتعديل أي مندوب)
   const addRiderToImp = () => {
     const rr = db.riders.find((x) => x.id === addImpRider);
     if (!rr || !editImp || editImp.results.some((x) => x.riderId === rr.id)) return;
@@ -1674,18 +1676,20 @@ function OrdersTab({ company, db, save, user }) {
             <div className="max-w-xs"><Field label={t("تاريخ الشيت", "Sheet Date")}><input type="date" className={inputCls} value={editImp.date} onChange={(e) => setEditImp({ ...editImp, date: e.target.value })} /></Field></div>
             <div className="flex items-end gap-2 flex-wrap">
               <div className="flex-1 min-w-[200px]"><Field label={t("إضافة مندوب للشيت", "Add rider to sheet")}>
-                <select className={inputCls} value={addImpRider} onChange={(e) => setAddImpRider(e.target.value)}>
+                <input className={inputCls + " mb-2"} placeholder={t("ابحث بالـ ID أو الاسم أو الهاتف", "Search by ID, name or phone")} value={addImpQ} onChange={(e) => setAddImpQ(e.target.value)} />
+                <select className={inputCls} value={addImpRider} onChange={(e) => setAddImpRider(e.target.value)} size={addImpQ ? Math.min(6, 1 + db.riders.length) : 1}>
                   <option value="">{t("— اختر مندوب —", "— choose rider —")}</option>
-                  {db.riders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""} · {cLabel(rr.company)}{rr.status && rr.status !== "Active" ? " (" + rr.status + ")" : ""}</option>)}
+                  {db.riders.filter((rr) => !editImp.results.some((x) => x.riderId === rr.id)).filter((rr) => { const q = addImpQ.trim().toLowerCase(); if (!q) return true; return [rr.companyId, rr.name, rr.phone].some((v) => String(v || "").toLowerCase().includes(q)); }).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))).map((rr) => <option key={rr.id} value={rr.id}>{rr.name} · {rr.companyId || rr.phone || ""} · {cLabel(rr.company)}{rr.status && rr.status !== "Active" ? " (" + rr.status + ")" : ""}</option>)}
                 </select>
               </Field></div>
               <Btn kind="ghost" onClick={addRiderToImp} disabled={!addImpRider}><Plus size={14} /> {t("إضافة", "Add")}</Btn>
             </div>
             <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="p-2 border-b border-slate-100"><input className={inputCls} placeholder={t("ابحث في مناديب الشيت (ID / اسم / هاتف)", "Search sheet riders (ID / name / phone)")} value={sheetQ} onChange={(e) => setSheetQ(e.target.value)} /></div>
               <div className="max-h-80 overflow-auto"><table className="w-full text-xs">
                 <thead><tr className="text-right text-slate-400 border-b border-slate-100">{[tr("المندوب"), tr("عدد الطلبات"), tr("مبلغ COD"), t("ساعات", "Hours"), t("قبول %", "Accept %")].map((h) => <th key={h} className="py-1.5 px-2 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>
-                  {editImp.results.map((r, i) => (
+                  {editImp.results.map((r, i) => ({ r, i })).filter(({ r }) => { const q = sheetQ.trim().toLowerCase(); if (!q) return true; const rr = db.riders.find((x) => x.id === r.riderId) || {}; return [r.name, rr.companyId, rr.phone].some((v) => String(v || "").toLowerCase().includes(q)); }).map(({ r, i }) => (
                     <tr key={i} className="border-b border-slate-50">
                       <td className="py-1.5 px-2 font-semibold">{r.name}</td>
                       <td className="px-2"><input type="number" className="w-20 rounded border border-slate-200 px-2 py-1" value={r.orders} onChange={(e) => setRow(i, "orders", e.target.value)} /></td>
