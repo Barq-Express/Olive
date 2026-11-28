@@ -1233,7 +1233,7 @@ function RiderBulkAdd({ company, existing, onAdd, onClose }) {
 }
 
 function Riders({ db, save, company, user }) {
-  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all"); const [comf, setComf] = useState("all"); const [statusF, setStatusF] = useState("all");
+  const [q, setQ] = useState(""); const [cf, setCf] = useState("all"); const [af, setAf] = useState("all"); const [natf, setNatf] = useState("all"); const [vehf, setVehf] = useState("all"); const [typef, setTypef] = useState("all"); const [statusF, setStatusF] = useState("all");
   const [editing, setEditing] = useState(null); const [bulk, setBulk] = useState(false);
   const scoped = db.riders.filter((r) => (!company || r.company === company));
   const allAreas = Array.from(new Set(db.riders.map((r) => r.area).filter(Boolean))).sort();
@@ -1246,7 +1246,6 @@ function Riders({ db, save, company, user }) {
     (natf === "all" || natClass(r.nationality) === natf) &&
     (vehf === "all" || (r.vehicleType || "") === vehf) &&
     (typef === "all" || r.type === typef) &&
-    (comf === "all" || (r.type === "Freelancer" && !(Number(r.commission) > 0))) &&
     (statusF === "all" || (r.status || "") === statusF) &&
     (r.name.includes(q) || r.phone.includes(q) || (r.companyId || "").includes(q) || (r.civil || "").includes(q) || (r.area || "").includes(q)));
   const isAdmin = user && (user.role === "Admin" || user.role === "Operations Manager");
@@ -1333,7 +1332,6 @@ function Riders({ db, save, company, user }) {
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={af} onChange={(e) => setAf(e.target.value)}><option value="all">{tr("كل المناطق")}</option>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={natf} onChange={(e) => setNatf(e.target.value)}><option value="all">{t("كل الجنسيات", "All nationalities")}</option><option value="omani">{t("عمانيين", "Omani")}</option><option value="foreign">{t("أجانب", "Foreign")}</option><option value="unknown">{t("غير محدد", "Unspecified")}</option></select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={vehf} onChange={(e) => setVehf(e.target.value)}><option value="all">{t("كل المركبات", "All vehicles")}</option><option value="Car">{t("سيارة", "Car")}</option><option value="Bike">{t("دراجة", "Bike")}</option></select>
-          <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={comf} onChange={(e) => setComf(e.target.value)}><option value="all">{t("كل الكومشن", "All commissions")}</option><option value="none">{t("فريلانسر بدون كومشن", "Freelancers without commission")}</option></select>
           <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 w-40" value={typef} onChange={(e) => setTypef(e.target.value)}><option value="all">{t("كل الأنواع", "All types")}</option><option value="Full Time">{t("فول تايم", "Full Time")}</option><option value="Freelancer">{t("فريلانسر", "Freelancer")}</option></select>
         </div>
         <div className="flex gap-2">
@@ -3415,14 +3413,25 @@ function ZoneCommissionCard({ db, save }) {
     save({ ...db, zoneCommissions: clean });
     alert(t("تم حفظ عمولة المناطق", "Zone commissions saved"));
   };
+  // المناطق اللي ما لها عمولة محفوظة (حسب القيم المحفوظة فعلياً، مو اللي تكتبها الحين)
+  const freeByArea = (a) => db.riders.filter((r) => r.type === "Freelancer" && r.status === "Active" && String(r.area || "").trim() === a).length;
+  const missingAreas = areaList.filter((a) => !(Number((db.zoneCommissions || {})[a]) > 0));
   return (
     <div className="border-t border-slate-100 pt-4 mt-4">
       <h4 className="font-bold text-slate-800 mb-1">{t("عمولة المناطق (الفريلانسر)", "Zone commission (Freelancers)")}</h4>
       <p className="text-xs text-slate-500 mb-3">{t("العمولة للطلب حسب المنطقة. المندوب اللي ما له كومشن خاص يأخذ عمولة منطقته تلقائياً، حتى لو سجّل من التسجيل. الكومشن الخاص بالمندوب له الأولوية.", "Per-order commission by area. Riders without their own commission get their area's rate automatically, including those registered via the form. A rider's own commission takes priority.")}</p>
+      <div className="text-sm mb-3 p-2 rounded-lg" style={{ background: missingAreas.length ? "#fff7ed" : "#f0fdf4", color: missingAreas.length ? "#9a3412" : "#166534" }}>
+        {missingAreas.length === 0
+          ? t("كل المناطق لها عمولة محفوظة ✓", "Every area has a saved commission ✓")
+          : <>
+              <b>{t("مناطق بدون عمولة: ", "Areas without commission: ")}{missingAreas.length}</b>
+              <div className="text-xs mt-1">{missingAreas.map((a) => `${a} (${freeByArea(a)} ${t("فريلانسر نشط", "active freelancers")})`).join(" · ")}</div>
+            </>}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
         {areaList.map((a) => (
           <div key={a} className="flex items-center gap-2">
-            <span className="text-sm text-slate-700 flex-1">{a}</span>
+            <span className="text-sm text-slate-700 flex-1">{a}{missingAreas.includes(a) && <span className="text-[11px] text-red-600 font-semibold mr-2">{t("بدون عمولة", "no commission")}</span>}</span>
             <input type="number" step="0.001" min="0" dir="ltr" className={inputCls + " w-28"} value={vals[a] ?? ""} onChange={(e) => setVals({ ...vals, [a]: e.target.value })} />
           </div>
         ))}
